@@ -20,7 +20,7 @@ export interface BlockHeader {
   proposer_address: string
 }
 
-export interface Block {
+export interface BabylonBlock {
   block_id: {
     hash: string
   }
@@ -32,7 +32,7 @@ export interface Block {
   }
 }
 
-export interface Transaction {
+export interface BabylonTransaction {
   txhash: string
   height: string
   tx: any
@@ -87,11 +87,17 @@ export interface FinalityProvider {
     moniker: string
     identity: string
     website: string
+    security_contact?: string
     details: string
   }
   commission: string
-  total_bonded_sat: string
-  active: boolean
+  total_bonded_sat?: string
+  slashed_babylon_height: string
+  slashed_btc_height: number
+  height: string
+  jailed: boolean
+  highest_voted_height: number
+  soft_deleted: boolean
 }
 
 export interface BTCDelegation {
@@ -148,11 +154,19 @@ class BabylonLCDClient {
 
   constructor() {
     const config = useRuntimeConfig()
-    this.baseUrl = config.babylonLcdUrl || 'https://lcd.testnet.babylonlabs.io'
-    this.chainId = config.public.babylonChainId || 'bbn-test-6'
+    console.log('[Babylon LCD] Config:', JSON.stringify({
+      babylonLcdUrl: config.babylonLcdUrl,
+      babylonRpcUrl: config.babylonRpcUrl,
+    }))
+    this.baseUrl = config.babylonLcdUrl as string || 'https://babylon-testnet-api.polkachu.com'
+    this.chainId = config.public?.babylonChainId || 'bbn-test-6'
   }
 
-  private async fetch<T>(path: string, useCache = true): Promise<T> {
+  getBaseUrl(): string {
+    return this.baseUrl
+  }
+
+  async fetch<T>(path: string, useCache = true): Promise<T> {
     const cacheKey = path
     const now = Date.now()
 
@@ -202,20 +216,20 @@ class BabylonLCDClient {
   // Blocks
   // ============================================
 
-  async getLatestBlock(): Promise<Block> {
-    return this.fetch<Block>('/cosmos/base/tendermint/v1beta1/blocks/latest', false)
+  async getLatestBlock(): Promise<BabylonBlock> {
+    return this.fetch<BabylonBlock>('/cosmos/base/tendermint/v1beta1/blocks/latest', false)
   }
 
-  async getBlockByHeight(height: number): Promise<Block> {
-    return this.fetch<Block>(`/cosmos/base/tendermint/v1beta1/blocks/${height}`)
+  async getBlockByHeight(height: number): Promise<BabylonBlock> {
+    return this.fetch<BabylonBlock>(`/cosmos/base/tendermint/v1beta1/blocks/${height}`)
   }
 
-  async getRecentBlocks(count = 10): Promise<Block[]> {
+  async getRecentBlocks(count = 10): Promise<BabylonBlock[]> {
     const latest = await this.getLatestBlock()
     const latestHeight = parseInt(latest.block.header.height)
     
-    const blocks: Block[] = [latest]
-    const promises: Promise<Block>[] = []
+    const blocks: BabylonBlock[] = [latest]
+    const promises: Promise<BabylonBlock>[] = []
     
     for (let i = 1; i < count && latestHeight - i > 0; i++) {
       promises.push(this.getBlockByHeight(latestHeight - i))
@@ -235,18 +249,18 @@ class BabylonLCDClient {
   // Transactions
   // ============================================
 
-  async getTransactionsByHeight(height: number): Promise<{ tx_responses: Transaction[] }> {
+  async getTransactionsByHeight(height: number): Promise<{ tx_responses: BabylonTransaction[] }> {
     return this.fetch(`/cosmos/tx/v1beta1/txs?events=tx.height=${height}`)
   }
 
-  async getTransactionByHash(hash: string): Promise<{ tx_response: Transaction }> {
+  async getTransactionByHash(hash: string): Promise<{ tx_response: BabylonTransaction }> {
     return this.fetch(`/cosmos/tx/v1beta1/txs/${hash}`)
   }
 
-  async getRecentTransactions(limit = 20): Promise<Transaction[]> {
+  async getRecentTransactions(limit = 20): Promise<BabylonTransaction[]> {
     // Get transactions from recent blocks
     const blocks = await this.getRecentBlocks(5)
-    const transactions: Transaction[] = []
+    const transactions: BabylonTransaction[] = []
 
     for (const block of blocks) {
       if (transactions.length >= limit) break
@@ -360,8 +374,13 @@ let _client: BabylonLCDClient | null = null
 export function getBabylonClient(): BabylonLCDClient {
   if (!_client) {
     _client = new BabylonLCDClient()
+    console.log('[Babylon LCD] Initialized client with baseUrl:', _client.getBaseUrl())
   }
   return _client
+}
+
+export function resetBabylonClient(): void {
+  _client = null
 }
 
 // ============================================

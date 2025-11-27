@@ -38,8 +38,8 @@ export default defineNuxtConfig({
   runtimeConfig: {
     // Private keys (server-only)
     authSecret: process.env.NUXT_AUTH_SECRET || 'tephra-dev-secret',
-    babylonRpcUrl: process.env.NUXT_BABYLON_RPC_URL || 'https://rpc.testnet.babylonlabs.io',
-    babylonLcdUrl: process.env.NUXT_BABYLON_LCD_URL || 'https://lcd.testnet.babylonlabs.io',
+    babylonRpcUrl: process.env.NUXT_BABYLON_RPC_URL || 'https://babylon-testnet-rpc.polkachu.com',
+    babylonLcdUrl: process.env.NUXT_BABYLON_LCD_URL || 'https://babylon-testnet-api.polkachu.com',
     // Public keys (exposed to client)
     public: {
       appName: 'Tephra',

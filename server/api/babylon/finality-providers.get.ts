@@ -5,23 +5,32 @@ export default defineEventHandler(async (event) => {
     const client = getBabylonClient()
     const result = await client.getFinalityProviders()
     
-    const formattedProviders = result.finality_providers.map(fp => ({
-      btcPk: fp.btc_pk,
-      btcPkShort: shortenAddress(fp.btc_pk, 12),
-      address: fp.addr,
-      addressShort: shortenAddress(fp.addr),
-      moniker: fp.description?.moniker || 'Unknown',
-      website: fp.description?.website || '',
-      commission: fp.commission,
-      commissionPercent: (parseFloat(fp.commission) * 100).toFixed(2),
-      totalBondedSat: fp.total_bonded_sat,
-      totalBondedBTC: (parseInt(fp.total_bonded_sat) / 100000000).toFixed(8),
-      active: fp.active,
-    }))
+    const formattedProviders = result.finality_providers.map(fp => {
+      // Determine if active: not jailed, not slashed, not soft deleted
+      const isActive = !fp.jailed && fp.slashed_babylon_height === '0' && !fp.soft_deleted
+      const bondedSat = fp.total_bonded_sat || '0'
+      
+      return {
+        btcPk: fp.btc_pk,
+        btcPkShort: shortenAddress(fp.btc_pk, 12),
+        address: fp.addr,
+        addressShort: shortenAddress(fp.addr),
+        moniker: fp.description?.moniker || 'Unknown',
+        website: fp.description?.website || '',
+        commission: fp.commission,
+        commissionPercent: (parseFloat(fp.commission || '0') * 100).toFixed(2),
+        totalBondedSat: bondedSat,
+        totalBondedBTC: (parseInt(bondedSat) / 100000000).toFixed(8),
+        active: isActive,
+        jailed: fp.jailed,
+        height: fp.height,
+        highestVotedHeight: fp.highest_voted_height,
+      }
+    })
     
-    // Sort by total bonded (descending)
+    // Sort by highest voted height (most active first)
     formattedProviders.sort((a, b) => 
-      parseInt(b.totalBondedSat) - parseInt(a.totalBondedSat)
+      (b.highestVotedHeight || 0) - (a.highestVotedHeight || 0)
     )
     
     return {

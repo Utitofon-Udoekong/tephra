@@ -28,3 +28,4 @@ logs
 .nuxt
 .specstory
 pnpm-lock.yaml
+pnpm-workspace.yaml

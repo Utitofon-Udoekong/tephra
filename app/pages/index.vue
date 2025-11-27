@@ -5,12 +5,46 @@ definePageMeta({
 
 const router = useRouter()
 
-// Mock stats data
+// Network stats - fetched from API
 const stats = ref({
-  totalAddresses: 125847,
-  totalTransactions: 2847593,
-  totalVolume: 847293847,
-  activeValidators: 42,
+  blockHeight: 0,
+  totalValidators: 0,
+  bondedTokens: '0',
+  chainId: 'bbn-test-6',
+})
+
+const statsLoading = ref(true)
+
+// Fetch real network stats
+const fetchStats = async () => {
+  statsLoading.value = true
+  try {
+    const response = await $fetch<{ success: boolean; data: any }>('/api/blockchain/stats')
+    if (response.success) {
+      stats.value = {
+        blockHeight: response.data.latestBlock?.height || 0,
+        totalValidators: response.data.totalValidators || 0,
+        bondedTokens: response.data.bondedTokens || '0',
+        chainId: response.data.chainId || 'bbn-test-6',
+      }
+    }
+  } catch (e) {
+    console.error('Failed to fetch stats:', e)
+  } finally {
+    statsLoading.value = false
+  }
+}
+
+onMounted(() => {
+  fetchStats()
+})
+
+// Format bonded tokens for display
+const formattedBondedTokens = computed(() => {
+  const value = parseInt(stats.value.bondedTokens) / 1000000
+  if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`
+  if (value >= 1000) return `${(value / 1000).toFixed(1)}K`
+  return value.toFixed(0)
 })
 
 const features = [
@@ -175,39 +209,26 @@ const handleGetStarted = () => {
       <!-- Statistics -->
       <section class="mb-20">
         <div class="text-center mb-10">
-          <h2 class="text-2xl font-bold text-white mb-2">Network Overview</h2>
-          <p class="text-slate-400">Real-time metrics from Babylon Genesis</p>
+          <div class="flex items-center justify-center gap-2 mb-2">
+            <h2 class="text-2xl font-bold text-white">Network Overview</h2>
+            <div v-if="!statsLoading" class="flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-500/10 border border-green-500/20">
+              <div class="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
+              <span class="text-xs text-green-400 font-medium">Live</span>
+            </div>
+          </div>
+          <p class="text-slate-400">Real-time metrics from Babylon Genesis ({{ stats.chainId }})</p>
         </div>
         
         <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
           <UiCard variant="default" hover class="text-center">
             <div class="flex items-center justify-center gap-2 mb-2">
-              <Icon name="mdi:wallet" class="text-2xl text-primary-400" />
+              <Icon name="mdi:cube-outline" class="text-2xl text-primary-400" />
             </div>
             <div class="text-3xl font-bold text-white mb-1 font-mono-nums">
-              {{ formatNumber(stats.totalAddresses) }}
+              <UiSkeleton v-if="statsLoading" variant="text" class="mx-auto w-24" />
+              <span v-else>{{ formatNumber(stats.blockHeight) }}</span>
             </div>
-            <div class="text-sm text-slate-400 font-medium">Active Addresses</div>
-          </UiCard>
-          
-          <UiCard variant="default" hover class="text-center">
-            <div class="flex items-center justify-center gap-2 mb-2">
-              <Icon name="mdi:swap-horizontal" class="text-2xl text-amber-400" />
-            </div>
-            <div class="text-3xl font-bold text-white mb-1 font-mono-nums">
-              {{ formatNumber(stats.totalTransactions) }}
-            </div>
-            <div class="text-sm text-slate-400 font-medium">Transactions</div>
-          </UiCard>
-          
-          <UiCard variant="default" hover class="text-center">
-            <div class="flex items-center justify-center gap-2 mb-2">
-              <Icon name="mdi:chart-bar" class="text-2xl text-orange-400" />
-            </div>
-            <div class="text-3xl font-bold text-white mb-1 font-mono-nums">
-              ${{ formatNumber(stats.totalVolume) }}
-            </div>
-            <div class="text-sm text-slate-400 font-medium">Total Volume</div>
+            <div class="text-sm text-slate-400 font-medium">Block Height</div>
           </UiCard>
           
           <UiCard variant="default" hover class="text-center">
@@ -215,9 +236,31 @@ const handleGetStarted = () => {
               <Icon name="mdi:server" class="text-2xl text-green-400" />
             </div>
             <div class="text-3xl font-bold text-white mb-1 font-mono-nums">
-              {{ stats.activeValidators }}
+              <UiSkeleton v-if="statsLoading" variant="text" class="mx-auto w-16" />
+              <span v-else>{{ stats.totalValidators }}</span>
             </div>
             <div class="text-sm text-slate-400 font-medium">Validators</div>
+          </UiCard>
+          
+          <UiCard variant="default" hover class="text-center">
+            <div class="flex items-center justify-center gap-2 mb-2">
+              <Icon name="mdi:lock" class="text-2xl text-amber-400" />
+            </div>
+            <div class="text-3xl font-bold text-white mb-1 font-mono-nums">
+              <UiSkeleton v-if="statsLoading" variant="text" class="mx-auto w-20" />
+              <span v-else>{{ formattedBondedTokens }}</span>
+            </div>
+            <div class="text-sm text-slate-400 font-medium">Bonded BBN</div>
+          </UiCard>
+          
+          <UiCard variant="default" hover class="text-center">
+            <div class="flex items-center justify-center gap-2 mb-2">
+              <Icon name="mdi:clock" class="text-2xl text-orange-400" />
+            </div>
+            <div class="text-3xl font-bold text-white mb-1 font-mono-nums">
+              ~6s
+            </div>
+            <div class="text-sm text-slate-400 font-medium">Block Time</div>
           </UiCard>
         </div>
       </section>

@@ -9,14 +9,31 @@ const address = computed(() => route.params.address as string)
 // Fetch address data
 const { data: addressData, pending, error } = await useFetch(`/api/addresses/${address.value}`)
 
-// Mock transaction history (would come from API in production)
-const transactions = ref([
-  { hash: 'tx1...abc', type: 'Transfer', direction: 'in', amount: '+500 BBN', from: 'bbn1sender...', time: '2 mins ago', status: 'success' },
-  { hash: 'tx2...def', type: 'Delegate', direction: 'out', amount: '-1,000 BBN', to: 'bbnvaloper1...', time: '1 hour ago', status: 'success' },
-  { hash: 'tx3...ghi', type: 'Transfer', direction: 'out', amount: '-250 BBN', to: 'bbn1receiver...', time: '3 hours ago', status: 'success' },
-  { hash: 'tx4...jkl', type: 'Claim Rewards', direction: 'in', amount: '+50 BBN', from: 'Staking', time: '1 day ago', status: 'success' },
-  { hash: 'tx5...mno', type: 'Transfer', direction: 'in', amount: '+2,000 BBN', from: 'bbn1exchange...', time: '2 days ago', status: 'success' },
-])
+// Fetch transactions for this address
+const transactions = ref<any[]>([])
+const txLoading = ref(true)
+const txMock = ref(false)
+
+const fetchTransactions = async () => {
+  txLoading.value = true
+  try {
+    const response = await $fetch<{ success: boolean; data: any[]; mock?: boolean }>(`/api/addresses/${address.value}/transactions`, {
+      query: { limit: 20 }
+    })
+    if (response.success) {
+      transactions.value = response.data
+      txMock.value = response.mock || false
+    }
+  } catch (e) {
+    console.error('Failed to fetch transactions:', e)
+  } finally {
+    txLoading.value = false
+  }
+}
+
+onMounted(() => {
+  fetchTransactions()
+})
 
 // Labels for this address
 const labels = ref([
@@ -167,7 +184,7 @@ const getLabelColorClass = (color: string) => {
               {{ label.label }}
             </UiBadge>
             <UiBadge variant="neutral" size="md">
-              {{ addressData.data.accountType }}
+              {{ addressData.data?.accountType || 'Account' }}
             </UiBadge>
           </div>
         </div>
@@ -189,13 +206,13 @@ const getLabelColorClass = (color: string) => {
         
         <UiCard variant="default" padding="md" class="text-center">
           <Icon name="mdi:counter" class="w-6 h-6 text-green-400 mx-auto mb-2" />
-          <div class="text-2xl font-bold text-white">{{ addressData.data.sequence }}</div>
+          <div class="text-2xl font-bold text-white">{{ addressData.data?.sequence || '0' }}</div>
           <div class="text-xs text-slate-500">Sequence</div>
         </UiCard>
         
         <UiCard variant="default" padding="md" class="text-center">
           <Icon name="mdi:identifier" class="w-6 h-6 text-blue-400 mx-auto mb-2" />
-          <div class="text-2xl font-bold text-white">#{{ addressData.data.accountNumber }}</div>
+          <div class="text-2xl font-bold text-white">#{{ addressData.data?.accountNumber || '0' }}</div>
           <div class="text-xs text-slate-500">Account Number</div>
         </UiCard>
       </div>
@@ -206,10 +223,38 @@ const getLabelColorClass = (color: string) => {
         <div class="lg:col-span-2">
           <UiCard variant="default" padding="none">
             <div class="p-6 border-b border-surface-700/50">
-              <h2 class="text-lg font-semibold text-white">Transaction History</h2>
+              <div class="flex items-center justify-between">
+                <h2 class="text-lg font-semibold text-white">Transaction History</h2>
+                <div class="flex items-center gap-2">
+                  <div v-if="txMock" class="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
+                    <Icon name="mdi:database-off" class="w-3 h-3 text-yellow-400" />
+                    <span class="text-xs text-yellow-400">Demo</span>
+                  </div>
+                  <button 
+                    class="p-1.5 rounded-lg hover:bg-surface-700/50 transition-colors"
+                    @click="fetchTransactions"
+                    :disabled="txLoading"
+                  >
+                    <Icon name="mdi:refresh" :class="['w-4 h-4 text-slate-400', txLoading && 'animate-spin']" />
+                  </button>
+                </div>
+              </div>
             </div>
             
-            <div class="divide-y divide-surface-700/50">
+            <!-- Loading state -->
+            <div v-if="txLoading" class="divide-y divide-surface-700/50">
+              <div v-for="i in 5" :key="i" class="p-4">
+                <div class="flex items-center gap-3">
+                  <UiSkeleton variant="custom" width="32px" height="32px" rounded="lg" />
+                  <div class="flex-1">
+                    <UiSkeleton variant="text" width="180px" class="mb-2" />
+                    <UiSkeleton variant="text" width="100px" height="12px" />
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div v-else class="divide-y divide-surface-700/50">
               <div
                 v-for="tx in transactions"
                 :key="tx.hash"
@@ -230,8 +275,8 @@ const getLabelColorClass = (color: string) => {
                       />
                     </div>
                     <div>
-                      <code class="text-sm text-white font-mono">{{ tx.hash }}</code>
-                      <div class="text-xs text-slate-500">{{ tx.type }}</div>
+                      <code class="text-sm text-white font-mono">{{ tx.hashShort || tx.hash }}</code>
+                      <div class="text-xs text-slate-500">{{ tx.type }} • Block {{ tx.height?.toLocaleString() }}</div>
                     </div>
                   </div>
                   <UiBadge :variant="tx.status === 'success' ? 'success' : 'error'" size="sm">
@@ -242,15 +287,21 @@ const getLabelColorClass = (color: string) => {
                 <div class="flex items-center justify-between text-sm pl-11">
                   <div class="text-slate-400">
                     {{ tx.direction === 'in' ? 'From' : 'To' }}: 
-                    <span class="font-mono">{{ tx.from || tx.to }}</span>
+                    <span class="font-mono">{{ tx.direction === 'in' ? tx.from : tx.to }}</span>
                   </div>
                   <div class="text-right">
                     <div :class="tx.direction === 'in' ? 'text-green-400' : 'text-red-400'" class="font-medium">
-                      {{ tx.amount }}
+                      {{ tx.direction === 'in' ? '+' : '-' }}{{ tx.amount }}
                     </div>
-                    <div class="text-xs text-slate-500">{{ tx.time }}</div>
+                    <div class="text-xs text-slate-500">{{ tx.timeAgo || tx.time }}</div>
                   </div>
                 </div>
+              </div>
+              
+              <!-- Empty state -->
+              <div v-if="transactions.length === 0" class="p-8 text-center">
+                <Icon name="mdi:swap-horizontal" class="w-12 h-12 text-slate-600 mx-auto mb-3" />
+                <p class="text-slate-500">No transactions found</p>
               </div>
             </div>
           </UiCard>
