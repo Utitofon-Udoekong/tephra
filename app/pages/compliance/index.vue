@@ -3,10 +3,46 @@ definePageMeta({
   layout: 'dashboard',
 })
 
+const router = useRouter()
+
 // Search state
 const searchAddress = ref('')
 const searchResult = ref<any>(null)
 const isSearching = ref(false)
+const searchError = ref('')
+
+// Known entities from API
+const knownEntities = ref<any[]>([])
+const entitiesLoading = ref(true)
+const isMock = ref(false)
+
+// Recent checks (stored locally)
+const recentChecks = ref<any[]>([])
+
+// Fetch known entities on mount
+const fetchEntities = async () => {
+  entitiesLoading.value = true
+  try {
+    const response = await $fetch<{ success: boolean; data: any; mock?: boolean }>('/api/compliance/entities')
+    if (response.success) {
+      knownEntities.value = response.data.entities
+      isMock.value = response.mock || false
+    }
+  } catch (e) {
+    console.error('Failed to fetch entities:', e)
+  } finally {
+    entitiesLoading.value = false
+  }
+}
+
+onMounted(() => {
+  fetchEntities()
+  // Load recent checks from localStorage
+  const stored = localStorage.getItem('tephra_recent_compliance_checks')
+  if (stored) {
+    recentChecks.value = JSON.parse(stored)
+  }
+})
 
 // Risk score color mapping
 const getRiskColor = (score: number) => {
@@ -16,117 +52,61 @@ const getRiskColor = (score: number) => {
   return { bg: 'bg-green-500', text: 'text-green-400', label: 'Clean' }
 }
 
-// Mock search function
+// Real search function using API
 const searchAddressRisk = async () => {
   if (!searchAddress.value) return
   
-  isSearching.value = true
-  
-  // Simulate API call
-  await new Promise(resolve => setTimeout(resolve, 1500))
-  
-  // Generate mock result based on address
-  const riskScore = Math.floor(Math.random() * 100)
-  const riskInfo = getRiskColor(riskScore)
-  
-  searchResult.value = {
-    address: searchAddress.value,
-    riskScore,
-    riskLevel: riskInfo.label,
-    riskColor: riskInfo,
-    lastChecked: new Date().toLocaleString(),
-    flags: riskScore >= 50 ? [
-      { type: 'warning', message: 'Associated with high-volume trading patterns' },
-      ...(riskScore >= 80 ? [{ type: 'danger', message: 'Linked to flagged addresses' }] : []),
-    ] : [],
-    labels: ['Whale', 'Active Trader'],
-    transactions: {
-      total: Math.floor(Math.random() * 10000) + 100,
-      last30Days: Math.floor(Math.random() * 500) + 50,
-    },
-    volume: {
-      total: '$' + (Math.random() * 10 + 1).toFixed(2) + 'M',
-      last30Days: '$' + (Math.random() * 1 + 0.1).toFixed(2) + 'M',
-    },
-    connections: {
-      exchanges: Math.floor(Math.random() * 5) + 1,
-      flaggedAddresses: riskScore >= 50 ? Math.floor(Math.random() * 3) + 1 : 0,
-    },
+  // Validate address format
+  if (!searchAddress.value.startsWith('bbn1') && !searchAddress.value.startsWith('bbnvaloper1')) {
+    searchError.value = 'Invalid address format. Must start with bbn1 or bbnvaloper1'
+    return
   }
   
-  isSearching.value = false
+  isSearching.value = true
+  searchError.value = ''
+  
+  try {
+    const response = await $fetch<{ success: boolean; data: any; mock?: boolean }>('/api/compliance/analyze', {
+      method: 'POST',
+      body: { address: searchAddress.value },
+    })
+    
+    if (response.success) {
+      searchResult.value = response.data
+      
+      // Add to recent checks
+      const check = {
+        address: response.data.addressShort,
+        addressFull: response.data.address,
+        riskScore: response.data.riskScore,
+        riskLevel: response.data.riskLevel,
+        checkedAt: new Date().toLocaleTimeString(),
+      }
+      
+      // Remove duplicate and add to front
+      recentChecks.value = [
+        check,
+        ...recentChecks.value.filter(c => c.addressFull !== check.addressFull),
+      ].slice(0, 10)
+      
+      // Save to localStorage
+      localStorage.setItem('tephra_recent_compliance_checks', JSON.stringify(recentChecks.value))
+    }
+  } catch (e: any) {
+    console.error('Failed to analyze address:', e)
+    searchError.value = 'Failed to analyze address. Please try again.'
+  } finally {
+    isSearching.value = false
+  }
 }
 
-// Recent checks
-const recentChecks = ref([
-  {
-    address: 'bbn1whale...abc',
-    addressFull: 'bbn1whaletrader123abc',
-    riskScore: 15,
-    riskLevel: 'Clean',
-    checkedAt: '10 mins ago',
-  },
-  {
-    address: 'bbn1smart...def',
-    addressFull: 'bbn1smartmoney456def',
-    riskScore: 42,
-    riskLevel: 'Low Risk',
-    checkedAt: '1 hour ago',
-  },
-  {
-    address: 'bbn1anon...ghi',
-    addressFull: 'bbn1anonymous789ghi',
-    riskScore: 78,
-    riskLevel: 'Medium Risk',
-    checkedAt: '2 hours ago',
-  },
-])
-
-// Compliance stats
-const complianceStats = ref({
-  addressesChecked: '12,458',
-  flaggedAddresses: '234',
-  averageRiskScore: '23',
-  lastScanTime: '2 mins ago',
-})
-
-// Known entities
-const knownEntities = ref([
-  {
-    name: 'Babylon Foundation',
-    type: 'Foundation',
-    addresses: 3,
-    riskLevel: 'Verified',
-    icon: 'mdi:shield-check',
-    iconColor: 'text-green-400',
-  },
-  {
-    name: 'Major Exchange A',
-    type: 'Exchange',
-    addresses: 12,
-    riskLevel: 'Verified',
-    icon: 'mdi:bank',
-    iconColor: 'text-blue-400',
-  },
-  {
-    name: 'Staking Provider X',
-    type: 'Validator',
-    addresses: 2,
-    riskLevel: 'Verified',
-    icon: 'mdi:server',
-    iconColor: 'text-purple-400',
-  },
-  {
-    name: 'Unknown Entity',
-    type: 'Unknown',
-    addresses: 1,
-    riskLevel: 'Suspicious',
-    icon: 'mdi:alert',
-    iconColor: 'text-yellow-400',
-  },
-])
-
-const router = useRouter()
+// Computed stats from entities
+const complianceStats = computed(() => ({
+  totalEntities: knownEntities.value.length,
+  activeEntities: knownEntities.value.filter(e => e.active).length,
+  checksToday: recentChecks.value.length,
+  lastScanTime: recentChecks.value.length > 0 ? recentChecks.value[0].checkedAt : 'Never',
+}))
 </script>
 
 <template>
@@ -137,39 +117,49 @@ const router = useRouter()
         <div class="flex items-center gap-3 mb-2">
           <Icon name="mdi:shield-check" class="w-8 h-8 text-green-400" />
           <h1 class="text-2xl font-bold text-white">Compliance</h1>
+          <div v-if="isMock" class="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
+            <Icon name="mdi:database-off" class="w-3 h-3 text-yellow-400" />
+            <span class="text-xs text-yellow-400">Demo</span>
+          </div>
         </div>
         <p class="text-slate-400">Risk assessment and address screening</p>
       </div>
       
       <UiBadge variant="success" size="sm" dot pulse>
-        Live Scanning
+        Live Analysis
       </UiBadge>
     </div>
     
     <!-- Stats overview -->
     <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
       <UiCard variant="default" padding="md" class="text-center">
-        <Icon name="mdi:magnify" class="w-6 h-6 text-primary-400 mx-auto mb-2" />
-        <div class="text-2xl font-bold text-white">{{ complianceStats.addressesChecked }}</div>
-        <div class="text-xs text-slate-500">Addresses Checked</div>
+        <Icon name="mdi:server" class="w-6 h-6 text-primary-400 mx-auto mb-2" />
+        <div class="text-2xl font-bold text-white">
+          <UiSkeleton v-if="entitiesLoading" variant="text" width="40px" class="mx-auto" />
+          <span v-else>{{ complianceStats.totalEntities }}</span>
+        </div>
+        <div class="text-xs text-slate-500">Known Entities</div>
       </UiCard>
       
       <UiCard variant="default" padding="md" class="text-center">
-        <Icon name="mdi:flag" class="w-6 h-6 text-red-400 mx-auto mb-2" />
-        <div class="text-2xl font-bold text-white">{{ complianceStats.flaggedAddresses }}</div>
-        <div class="text-xs text-slate-500">Flagged</div>
+        <Icon name="mdi:check-circle" class="w-6 h-6 text-green-400 mx-auto mb-2" />
+        <div class="text-2xl font-bold text-white">
+          <UiSkeleton v-if="entitiesLoading" variant="text" width="40px" class="mx-auto" />
+          <span v-else>{{ complianceStats.activeEntities }}</span>
+        </div>
+        <div class="text-xs text-slate-500">Active</div>
       </UiCard>
       
       <UiCard variant="default" padding="md" class="text-center">
-        <Icon name="mdi:chart-arc" class="w-6 h-6 text-green-400 mx-auto mb-2" />
-        <div class="text-2xl font-bold text-white">{{ complianceStats.averageRiskScore }}</div>
-        <div class="text-xs text-slate-500">Avg Risk Score</div>
+        <Icon name="mdi:magnify" class="w-6 h-6 text-amber-400 mx-auto mb-2" />
+        <div class="text-2xl font-bold text-white">{{ complianceStats.checksToday }}</div>
+        <div class="text-xs text-slate-500">Checks Today</div>
       </UiCard>
       
       <UiCard variant="default" padding="md" class="text-center">
         <Icon name="mdi:clock" class="w-6 h-6 text-blue-400 mx-auto mb-2" />
         <div class="text-xl font-bold text-white">{{ complianceStats.lastScanTime }}</div>
-        <div class="text-xs text-slate-500">Last Scan</div>
+        <div class="text-xs text-slate-500">Last Check</div>
       </UiCard>
     </div>
     
@@ -195,6 +185,12 @@ const router = useRouter()
           <Icon name="mdi:shield-search" class="w-4 h-4 mr-2" />
           Check Risk
         </UiButton>
+      </div>
+      
+      <!-- Error message -->
+      <div v-if="searchError" class="mt-3 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
+        <Icon name="mdi:alert-circle" class="w-4 h-4 inline mr-2" />
+        {{ searchError }}
       </div>
       
       <!-- Search Result -->
@@ -254,27 +250,56 @@ const router = useRouter()
         <!-- Stats grid -->
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div class="p-3 rounded-lg bg-surface-700/30">
-            <p class="text-xs text-slate-500">Total Txs</p>
-            <p class="text-lg font-bold text-white">{{ searchResult.transactions.total.toLocaleString() }}</p>
+            <p class="text-xs text-slate-500">Balance</p>
+            <p class="text-lg font-bold text-primary-400">{{ searchResult.metrics?.balance || '0.00' }} BBN</p>
           </div>
           <div class="p-3 rounded-lg bg-surface-700/30">
-            <p class="text-xs text-slate-500">30d Txs</p>
-            <p class="text-lg font-bold text-white">{{ searchResult.transactions.last30Days }}</p>
+            <p class="text-xs text-slate-500">Transactions</p>
+            <p class="text-lg font-bold text-white">{{ searchResult.metrics?.sequence || 0 }}</p>
           </div>
           <div class="p-3 rounded-lg bg-surface-700/30">
-            <p class="text-xs text-slate-500">Total Volume</p>
-            <p class="text-lg font-bold text-white">{{ searchResult.volume.total }}</p>
+            <p class="text-xs text-slate-500">Account Type</p>
+            <p class="text-lg font-bold text-white">{{ searchResult.metrics?.accountType || 'Unknown' }}</p>
           </div>
           <div class="p-3 rounded-lg bg-surface-700/30">
-            <p class="text-xs text-slate-500">Flagged Connections</p>
+            <p class="text-xs text-slate-500">Activity Level</p>
             <p 
               :class="[
-                'text-lg font-bold',
-                searchResult.connections.flaggedAddresses > 0 ? 'text-red-400' : 'text-green-400'
+                'text-lg font-bold capitalize',
+                searchResult.analysis?.activityLevel === 'high' ? 'text-amber-400' : 
+                searchResult.analysis?.activityLevel === 'medium' ? 'text-blue-400' : 'text-slate-400'
               ]"
             >
-              {{ searchResult.connections.flaggedAddresses }}
+              {{ searchResult.analysis?.activityLevel || 'unknown' }}
             </p>
+          </div>
+        </div>
+        
+        <!-- Analysis details -->
+        <div class="mt-4 grid grid-cols-3 gap-4">
+          <div class="flex items-center gap-2 p-2 rounded-lg bg-surface-700/30">
+            <Icon 
+              :name="searchResult.analysis?.isFinalityProvider ? 'mdi:check-circle' : 'mdi:close-circle'" 
+              :class="searchResult.analysis?.isFinalityProvider ? 'text-green-400' : 'text-slate-500'"
+              class="w-4 h-4"
+            />
+            <span class="text-sm text-slate-400">Finality Provider</span>
+          </div>
+          <div class="flex items-center gap-2 p-2 rounded-lg bg-surface-700/30">
+            <Icon 
+              :name="searchResult.analysis?.isValidator ? 'mdi:check-circle' : 'mdi:close-circle'" 
+              :class="searchResult.analysis?.isValidator ? 'text-green-400' : 'text-slate-500'"
+              class="w-4 h-4"
+            />
+            <span class="text-sm text-slate-400">Validator</span>
+          </div>
+          <div class="flex items-center gap-2 p-2 rounded-lg bg-surface-700/30">
+            <Icon 
+              :name="searchResult.analysis?.hasLabels ? 'mdi:check-circle' : 'mdi:close-circle'" 
+              :class="searchResult.analysis?.hasLabels ? 'text-green-400' : 'text-slate-500'"
+              class="w-4 h-4"
+            />
+            <span class="text-sm text-slate-400">Has Labels</span>
           </div>
         </div>
         
@@ -343,15 +368,36 @@ const router = useRouter()
         <div class="p-6 border-b border-surface-700/50">
           <div class="flex items-center justify-between">
             <h2 class="text-lg font-semibold text-white">Known Entities</h2>
-            <UiBadge variant="neutral" size="sm">{{ knownEntities.length }} Tracked</UiBadge>
+            <div class="flex items-center gap-2">
+              <button 
+                class="p-1 rounded hover:bg-surface-700/50 transition-colors"
+                @click="fetchEntities"
+                :disabled="entitiesLoading"
+              >
+                <Icon name="mdi:refresh" :class="['w-4 h-4 text-slate-400', entitiesLoading && 'animate-spin']" />
+              </button>
+              <UiBadge variant="neutral" size="sm">{{ knownEntities.length }} Tracked</UiBadge>
+            </div>
           </div>
         </div>
         
-        <div class="divide-y divide-surface-700/50">
+        <!-- Loading state -->
+        <div v-if="entitiesLoading" class="p-4 space-y-3">
+          <div v-for="i in 4" :key="i" class="flex items-center gap-3">
+            <UiSkeleton variant="custom" width="40px" height="40px" rounded="lg" />
+            <div class="flex-1">
+              <UiSkeleton variant="text" width="120px" class="mb-2" />
+              <UiSkeleton variant="text" width="80px" height="12px" />
+            </div>
+          </div>
+        </div>
+        
+        <div v-else class="divide-y divide-surface-700/50 max-h-[400px] overflow-y-auto">
           <div
             v-for="entity in knownEntities"
-            :key="entity.name"
-            class="p-4 hover:bg-surface-800/30 transition-colors"
+            :key="entity.address"
+            class="p-4 hover:bg-surface-800/30 transition-colors cursor-pointer"
+            @click="entity.address && router.push(`/address/${entity.address}`)"
           >
             <div class="flex items-center justify-between">
               <div class="flex items-center gap-3">
@@ -360,16 +406,28 @@ const router = useRouter()
                 </div>
                 <div>
                   <p class="text-white font-medium">{{ entity.name }}</p>
-                  <p class="text-xs text-slate-500">{{ entity.type }} • {{ entity.addresses }} addresses</p>
+                  <p class="text-xs text-slate-500">{{ entity.type }}</p>
+                  <code v-if="entity.addressShort" class="text-xs text-slate-600 font-mono">{{ entity.addressShort }}</code>
                 </div>
               </div>
               
-              <UiBadge 
-                :variant="entity.riskLevel === 'Verified' ? 'success' : 'warning'"
-                size="sm"
-              >
-                {{ entity.riskLevel }}
-              </UiBadge>
+              <div class="text-right">
+                <UiBadge 
+                  :variant="entity.riskLevel === 'Verified' ? 'success' : entity.riskLevel === 'Jailed' || entity.riskLevel === 'Suspended' ? 'error' : 'warning'"
+                  size="sm"
+                >
+                  {{ entity.riskLevel }}
+                </UiBadge>
+                <a 
+                  v-if="entity.website" 
+                  :href="entity.website" 
+                  target="_blank"
+                  class="block text-xs text-primary-400 hover:underline mt-1"
+                  @click.stop
+                >
+                  Website
+                </a>
+              </div>
             </div>
           </div>
         </div>
