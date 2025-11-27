@@ -5,96 +5,70 @@ definePageMeta({
 
 const { user, isDemo } = useAuth()
 
-// Mock portfolio data
-const portfolio = ref({
-  totalValue: '$12,458.92',
-  totalValueChange: '+$1,234.56',
-  totalValueChangePercent: '+11.0%',
-  lastUpdated: '2 mins ago',
+// Portfolio data from API
+const watchedAddresses = ref<any[]>([])
+const loading = ref(true)
+const totalBalance = ref('0.00')
+
+const fetchPortfolio = async () => {
+  loading.value = true
+  try {
+    const response = await $fetch<{ success: boolean; data: any }>('/api/portfolio/watched')
+    if (response.success) {
+      watchedAddresses.value = response.data.addresses
+      totalBalance.value = response.data.totalBalance
+    }
+  } catch (e) {
+    console.error('Failed to fetch portfolio:', e)
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(() => {
+  fetchPortfolio()
 })
 
-// Token holdings
-const holdings = ref([
-  {
+// Portfolio summary
+const portfolio = computed(() => ({
+  totalValue: `${totalBalance.value} BBN`,
+  totalValueChange: 'Live',
+  totalValueChangePercent: '',
+  lastUpdated: 'now',
+}))
+
+// Token holdings from watched addresses (aggregate BBN)
+const holdings = computed(() => {
+  if (watchedAddresses.value.length === 0) return []
+  
+  return [{
     symbol: 'BBN',
     name: 'Babylon',
     icon: 'mdi:alpha-b-circle',
     iconColor: 'text-amber-400',
-    balance: '5,234.56',
-    value: '$7,851.84',
-    price: '$1.50',
-    change24h: '+12.5%',
+    balance: totalBalance.value,
+    value: `${totalBalance.value} BBN`,
+    price: 'Testnet',
+    change24h: '-',
     changePositive: true,
-    allocation: 63,
-  },
-  {
-    symbol: 'stBTC',
-    name: 'Staked BTC',
-    icon: 'mdi:bitcoin',
-    iconColor: 'text-orange-400',
-    balance: '0.0512',
-    value: '$4,096.00',
-    price: '$80,000',
-    change24h: '+2.1%',
-    changePositive: true,
-    allocation: 33,
-  },
-  {
-    symbol: 'ATOM',
-    name: 'Cosmos',
-    icon: 'mdi:atom',
-    iconColor: 'text-purple-400',
-    balance: '45.23',
-    value: '$511.08',
-    price: '$11.30',
-    change24h: '-1.8%',
-    changePositive: false,
-    allocation: 4,
-  },
-])
+    allocation: 100,
+  }]
+})
 
-// Staking positions
-const stakingPositions = ref([
-  {
-    validator: 'Babylon Foundation',
-    amount: '2,500 BBN',
-    value: '$3,750.00',
-    apr: '12.5%',
-    rewards: '28.45 BBN',
-    rewardsValue: '$42.68',
-    status: 'Active',
-  },
-  {
-    validator: 'StakeLab',
-    amount: '1,000 BBN',
-    value: '$1,500.00',
-    apr: '11.8%',
-    rewards: '12.34 BBN',
-    rewardsValue: '$18.51',
-    status: 'Active',
-  },
-])
+// Placeholder staking positions (would need real staking query)
+const stakingPositions = ref<any[]>([])
 
-// BTC staking positions
-const btcStaking = ref([
-  {
-    provider: 'FP-1 (Alpha)',
-    amount: '0.0512 BTC',
-    value: '$4,096.00',
-    stakingPeriod: '21,600 blocks',
-    status: 'Active',
-    rewards: 'Pending',
-  },
-])
+// Placeholder BTC staking positions
+const btcStaking = ref<any[]>([])
 
-// Recent activity
+// Recent activity (placeholder)
 const recentActivity = ref([
   {
-    type: 'Reward Claim',
-    amount: '+28.45 BBN',
-    value: '+$42.68',
-    time: '2 hours ago',
-    icon: 'mdi:gift',
+    type: 'Wallet Added',
+    amount: '-',
+    value: '-',
+    time: 'Recently',
+    icon: 'mdi:wallet-plus',
     iconColor: 'text-green-400',
   },
   {
@@ -123,40 +97,53 @@ const recentActivity = ref([
   },
 ])
 
-// Watched addresses
-const watchedAddresses = ref([
-  {
-    label: 'My Main Wallet',
-    address: 'bbn1abc...xyz',
-    addressFull: 'bbn1abcdefghijklmnopqrstuvwxyz',
-    balance: '5,234.56 BBN',
-    isPrimary: true,
-  },
-  {
-    label: 'Trading Wallet',
-    address: 'bbn1def...uvw',
-    addressFull: 'bbn1defghijklmnopqrstuvw',
-    balance: '1,200.00 BBN',
-    isPrimary: false,
-  },
-])
-
+// Add wallet modal
 const showAddWalletModal = ref(false)
 const newWalletAddress = ref('')
+const newWalletNickname = ref('')
+const addingWallet = ref(false)
 const newWalletLabel = ref('')
 
-const addWallet = () => {
-  if (newWalletAddress.value && newWalletLabel.value) {
-    watchedAddresses.value.push({
-      label: newWalletLabel.value,
-      address: newWalletAddress.value.substring(0, 10) + '...' + newWalletAddress.value.slice(-3),
-      addressFull: newWalletAddress.value,
-      balance: '0.00 BBN',
-      isPrimary: false,
+const addWallet = async () => {
+  if (!newWalletAddress.value) return
+  
+  // Validate address format
+  if (!newWalletAddress.value.startsWith('bbn1') && !newWalletAddress.value.startsWith('bbnvaloper1')) {
+    alert('Invalid Babylon address format. Must start with bbn1 or bbnvaloper1')
+    return
+  }
+  
+  addingWallet.value = true
+  try {
+    const response = await $fetch<{ success: boolean; data: any }>('/api/portfolio/watched', {
+      method: 'POST',
+      body: {
+        address: newWalletAddress.value,
+        nickname: newWalletLabel.value || null,
+      },
     })
-    showAddWalletModal.value = false
-    newWalletAddress.value = ''
-    newWalletLabel.value = ''
+    
+    if (response.success) {
+      // Refresh portfolio data
+      await fetchPortfolio()
+      showAddWalletModal.value = false
+      newWalletAddress.value = ''
+      newWalletLabel.value = ''
+    }
+  } catch (e) {
+    console.error('Failed to add wallet:', e)
+    alert('Failed to add wallet')
+  } finally {
+    addingWallet.value = false
+  }
+}
+
+const removeWallet = async (id: number) => {
+  try {
+    await $fetch(`/api/portfolio/watched/${id}`, { method: 'DELETE' })
+    await fetchPortfolio()
+  } catch (e) {
+    console.error('Failed to remove wallet:', e)
   }
 }
 </script>
@@ -375,7 +362,16 @@ const addWallet = () => {
         <UiCard variant="default" padding="none">
           <div class="p-6 border-b border-surface-700/50">
             <div class="flex items-center justify-between">
-              <h2 class="text-lg font-semibold text-white">Watched Addresses</h2>
+              <div class="flex items-center gap-2">
+                <h2 class="text-lg font-semibold text-white">Watched Addresses</h2>
+                <button 
+                  class="p-1 rounded hover:bg-surface-700/50 transition-colors"
+                  @click="fetchPortfolio"
+                  :disabled="loading"
+                >
+                  <Icon name="mdi:refresh" :class="['w-4 h-4 text-slate-400', loading && 'animate-spin']" />
+                </button>
+              </div>
               <button 
                 class="text-primary-400 hover:text-primary-300 text-sm"
                 @click="showAddWalletModal = true"
@@ -385,20 +381,45 @@ const addWallet = () => {
             </div>
           </div>
           
-          <div class="divide-y divide-surface-700/50">
+          <!-- Loading state -->
+          <div v-if="loading" class="p-4">
+            <div v-for="i in 2" :key="i" class="flex items-center gap-3 mb-4">
+              <UiSkeleton variant="custom" width="100%" height="60px" rounded="lg" />
+            </div>
+          </div>
+          
+          <!-- Empty state -->
+          <div v-else-if="watchedAddresses.length === 0" class="p-6 text-center">
+            <Icon name="mdi:wallet-outline" class="w-10 h-10 text-slate-600 mx-auto mb-3" />
+            <p class="text-slate-500 mb-2">No watched addresses</p>
+            <button 
+              class="text-primary-400 hover:text-primary-300 text-sm"
+              @click="showAddWalletModal = true"
+            >
+              Add your first wallet
+            </button>
+          </div>
+          
+          <div v-else class="divide-y divide-surface-700/50">
             <div
               v-for="addr in watchedAddresses"
-              :key="addr.addressFull"
-              class="p-4 hover:bg-surface-800/30 transition-colors cursor-pointer"
+              :key="addr.id"
+              class="p-4 hover:bg-surface-800/30 transition-colors group"
             >
               <div class="flex items-center justify-between mb-1">
                 <div class="flex items-center gap-2">
-                  <span class="text-white font-medium">{{ addr.label }}</span>
-                  <Icon v-if="addr.isPrimary" name="mdi:star" class="w-4 h-4 text-amber-400" />
+                  <span class="text-white font-medium">{{ addr.nickname }}</span>
                 </div>
+                <button 
+                  class="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-500/10 transition-all"
+                  @click.stop="removeWallet(addr.id)"
+                  title="Remove wallet"
+                >
+                  <Icon name="mdi:close" class="w-4 h-4 text-red-400" />
+                </button>
               </div>
-              <code class="text-xs text-slate-500 font-mono">{{ addr.address }}</code>
-              <p class="text-sm text-slate-300 mt-1">{{ addr.balance }}</p>
+              <code class="text-xs text-slate-500 font-mono">{{ addr.addressShort }}</code>
+              <p class="text-sm text-primary-400 mt-1 font-medium">{{ addr.balance }} BBN</p>
             </div>
           </div>
         </UiCard>

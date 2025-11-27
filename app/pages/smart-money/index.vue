@@ -3,110 +3,59 @@ definePageMeta({
   layout: 'dashboard',
 })
 
-// Smart money wallets - would come from ML/heuristics analysis
-const smartMoneyWallets = ref([
-  {
-    address: 'bbn1alpha...xyz',
-    addressFull: 'bbn1alphawhale123xyz',
-    label: 'Alpha Whale',
-    pnl: '+$2.4M',
-    pnlPercent: '+340%',
-    winRate: '78%',
-    trades: 156,
-    avgHoldTime: '12 days',
-    lastActive: '2 hours ago',
-    tags: ['Early Adopter', 'DeFi Expert'],
-    trending: true,
-  },
-  {
-    address: 'bbn1smart...abc',
-    addressFull: 'bbn1smarttrader456abc',
-    label: 'Smart Trader #1',
-    pnl: '+$1.8M',
-    pnlPercent: '+280%',
-    winRate: '72%',
-    trades: 234,
-    avgHoldTime: '8 days',
-    lastActive: '5 hours ago',
-    tags: ['High Volume', 'Consistent'],
-    trending: true,
-  },
-  {
-    address: 'bbn1profit...def',
-    addressFull: 'bbn1profitmaker789def',
-    label: 'Profit Maker',
-    pnl: '+$1.2M',
-    pnlPercent: '+195%',
-    winRate: '68%',
-    trades: 89,
-    avgHoldTime: '21 days',
-    lastActive: '1 day ago',
-    tags: ['Long-term', 'Patient'],
-    trending: false,
-  },
-  {
-    address: 'bbn1whale...ghi',
-    addressFull: 'bbn1whalewatch012ghi',
-    label: 'Whale Watch',
-    pnl: '+$980K',
-    pnlPercent: '+156%',
-    winRate: '65%',
-    trades: 45,
-    avgHoldTime: '30 days',
-    lastActive: '3 days ago',
-    tags: ['Whale', 'Holder'],
-    trending: false,
-  },
-  {
-    address: 'bbn1defi...jkl',
-    addressFull: 'bbn1defimaster345jkl',
-    label: 'DeFi Master',
-    pnl: '+$750K',
-    pnlPercent: '+142%',
-    winRate: '71%',
-    trades: 312,
-    avgHoldTime: '5 days',
-    lastActive: '30 mins ago',
-    tags: ['DeFi', 'Yield Farmer'],
-    trending: true,
-  },
-])
+const router = useRouter()
+const { finalityProviders, transactions, fetchFinalityProviders, fetchTransactions, isLoading, isMock } = useBlockchain()
 
-// Recent whale movements
-const whaleMovements = ref([
-  {
-    address: 'bbn1whale...abc',
-    type: 'Accumulation',
-    amount: '+500,000 BBN',
-    value: '$1.2M',
-    time: '15 mins ago',
-    impact: 'high',
-  },
-  {
-    address: 'bbn1smart...def',
-    type: 'Transfer',
-    amount: '250,000 BBN',
-    value: '$600K',
-    time: '1 hour ago',
-    impact: 'medium',
-  },
-  {
-    address: 'bbn1alpha...ghi',
-    type: 'Stake',
-    amount: '1,000,000 BBN',
-    value: '$2.4M',
-    time: '2 hours ago',
-    impact: 'high',
-  },
-  {
-    address: 'bbn1profit...jkl',
-    type: 'Unstake',
-    amount: '100,000 BBN',
-    value: '$240K',
-    time: '4 hours ago',
-    impact: 'low',
-  },
-])
+// Fetch data on mount
+onMounted(() => {
+  fetchFinalityProviders()
+})
+
+// Transform finality providers into "smart money" format
+const smartMoneyWallets = computed(() => {
+  return finalityProviders.value.map((fp: any, index: number) => ({
+    address: fp.addressShort,
+    addressFull: fp.address,
+    label: fp.moniker || 'Unknown Provider',
+    btcPk: fp.btcPkShort,
+    commission: fp.commissionPercent,
+    bondedBTC: fp.totalBondedBTC,
+    active: fp.active,
+    website: fp.website,
+    jailed: fp.jailed,
+    highestVotedHeight: fp.highestVotedHeight,
+    // For "smart money" display
+    pnl: fp.active ? 'Active' : 'Inactive',
+    winRate: `${fp.commissionPercent}%`,
+    trades: fp.highestVotedHeight || 0,
+    tags: [
+      fp.active ? 'Active' : 'Inactive',
+      'Finality Provider',
+      index < 5 ? 'Top Provider' : '',
+    ].filter(Boolean),
+    trending: fp.active && index < 5,
+  }))
+})
+
+// Fetch recent transactions for whale movements
+const { transactions, fetchTransactions } = useBlockchain()
+
+onMounted(async () => {
+  await fetchFinalityProviders()
+  await fetchTransactions(20)
+})
+
+// Recent whale movements from transactions
+const whaleMovements = computed(() => {
+  return transactions.value.slice(0, 5).map((tx: any) => ({
+    address: tx.from || tx.to || 'Unknown',
+    type: tx.type,
+    amount: tx.amount || '-',
+    time: tx.timeAgo,
+    impact: tx.type === 'BTC Stake' || tx.type === 'Delegate' ? 'high' : 'medium',
+    status: tx.status,
+  }))
+})
 
 // Trading signals
 const tradingSignals = ref([
@@ -158,14 +107,18 @@ const router = useRouter()
         <div class="flex items-center gap-3 mb-2">
           <h1 class="text-2xl font-bold text-white">Smart Money Tracking</h1>
           <UiBadge variant="primary" size="sm">
-            <Icon name="mdi:star" class="w-3 h-3 mr-1" />
-            New
+            <Icon name="mdi:server" class="w-3 h-3 mr-1" />
+            Finality Providers
           </UiBadge>
+          <div v-if="isMock" class="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
+            <Icon name="mdi:database-off" class="w-3 h-3 text-yellow-400" />
+            <span class="text-xs text-yellow-400">Demo</span>
+          </div>
         </div>
-        <p class="text-slate-400">Track sophisticated on-chain actors and whale movements</p>
+        <p class="text-slate-400">Track Babylon finality providers and network activity</p>
       </div>
       
-      <UiButton variant="outline" size="sm">
+      <UiButton variant="outline" size="sm" @click="fetchFinalityProviders" :loading="isLoading">
         <Icon name="mdi:refresh" class="w-4 h-4 mr-2" />
         Refresh
       </UiButton>
@@ -174,21 +127,30 @@ const router = useRouter()
     <!-- Stats overview -->
     <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
       <UiCard variant="default" padding="md" class="text-center">
-        <Icon name="mdi:account-star" class="w-6 h-6 text-primary-400 mx-auto mb-2" />
-        <div class="text-2xl font-bold text-white">{{ smartMoneyWallets.length }}</div>
-        <div class="text-xs text-slate-500">Tracked Wallets</div>
+        <Icon name="mdi:server" class="w-6 h-6 text-primary-400 mx-auto mb-2" />
+        <div class="text-2xl font-bold text-white">
+          <UiSkeleton v-if="isLoading" variant="text" width="40px" class="mx-auto" />
+          <span v-else>{{ smartMoneyWallets.length }}</span>
+        </div>
+        <div class="text-xs text-slate-500">Finality Providers</div>
       </UiCard>
       
       <UiCard variant="default" padding="md" class="text-center">
-        <Icon name="mdi:trending-up" class="w-6 h-6 text-green-400 mx-auto mb-2" />
-        <div class="text-2xl font-bold text-white">+$7.1M</div>
-        <div class="text-xs text-slate-500">Total PnL</div>
+        <Icon name="mdi:check-circle" class="w-6 h-6 text-green-400 mx-auto mb-2" />
+        <div class="text-2xl font-bold text-white">
+          <UiSkeleton v-if="isLoading" variant="text" width="40px" class="mx-auto" />
+          <span v-else>{{ smartMoneyWallets.filter(w => w.active).length }}</span>
+        </div>
+        <div class="text-xs text-slate-500">Active Providers</div>
       </UiCard>
       
       <UiCard variant="default" padding="md" class="text-center">
         <Icon name="mdi:chart-line" class="w-6 h-6 text-amber-400 mx-auto mb-2" />
-        <div class="text-2xl font-bold text-white">71%</div>
-        <div class="text-xs text-slate-500">Avg Win Rate</div>
+        <div class="text-2xl font-bold text-white">
+          <UiSkeleton v-if="isLoading" variant="text" width="40px" class="mx-auto" />
+          <span v-else>{{ transactions.length }}</span>
+        </div>
+        <div class="text-xs text-slate-500">Recent Transactions</div>
       </UiCard>
       
       <UiCard variant="default" padding="md" class="text-center">
@@ -257,13 +219,15 @@ const router = useRouter()
               <div class="flex items-center justify-between text-sm pl-11">
                 <div class="flex items-center gap-4">
                   <span class="text-slate-400">
-                    Win Rate: <span class="text-white">{{ wallet.winRate }}</span>
+                    Commission: <span class="text-white">{{ wallet.commission }}%</span>
                   </span>
                   <span class="text-slate-400">
-                    Trades: <span class="text-white">{{ wallet.trades }}</span>
+                    Votes: <span class="text-white">{{ wallet.trades?.toLocaleString() || '0' }}</span>
                   </span>
-                  <span class="text-slate-400">
-                    Avg Hold: <span class="text-white">{{ wallet.avgHoldTime }}</span>
+                  <span v-if="wallet.website" class="text-slate-400">
+                    <a :href="wallet.website" target="_blank" class="text-primary-400 hover:underline">
+                      Website
+                    </a>
                   </span>
                 </div>
                 <span class="text-xs text-slate-500">{{ wallet.lastActive }}</span>

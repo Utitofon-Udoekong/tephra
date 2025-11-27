@@ -11,13 +11,6 @@ const searchError = ref('')
 // Recent searches (stored in localStorage)
 const recentSearches = ref<string[]>([])
 
-onMounted(() => {
-  const stored = localStorage.getItem('tephra_recent_searches')
-  if (stored) {
-    recentSearches.value = JSON.parse(stored)
-  }
-})
-
 const saveRecentSearch = (address: string) => {
   const searches = recentSearches.value.filter(s => s !== address)
   searches.unshift(address)
@@ -54,23 +47,54 @@ const clearRecentSearches = () => {
   localStorage.removeItem('tephra_recent_searches')
 }
 
-// Sample labeled addresses for the directory
-const labeledAddresses = ref([
-  { address: 'bbn1exchange...hot', label: 'Exchange Hot Wallet', category: 'exchange', balance: '2.5M BBN' },
-  { address: 'bbn1whale...abc', label: 'Whale #1', category: 'whale', balance: '1.8M BBN' },
-  { address: 'bbn1validator...xyz', label: 'Babylon Labs', category: 'validator', balance: '1.2M BBN' },
-  { address: 'bbn1smart...def', label: 'Smart Money Alpha', category: 'smart_money', balance: '890K BBN' },
-  { address: 'bbn1defi...ghi', label: 'DeFi Protocol', category: 'protocol', balance: '750K BBN' },
-  { address: 'bbn1bridge...jkl', label: 'Bridge Contract', category: 'bridge', balance: '500K BBN' },
-])
+// Labeled addresses from database
+const labeledAddresses = ref<any[]>([])
+const labelsLoading = ref(true)
+
+const fetchLabels = async () => {
+  labelsLoading.value = true
+  try {
+    const response = await $fetch<{ success: boolean; data: { labels: any[] } }>('/api/labels', {
+      query: { limit: 20 }
+    })
+    if (response.success) {
+      labeledAddresses.value = response.data.labels.map(l => ({
+        address: l.address,
+        label: l.label,
+        category: l.category,
+        source: l.source,
+        createdAt: l.createdAt,
+      }))
+    }
+  } catch (e) {
+    console.error('Failed to fetch labels:', e)
+  } finally {
+    labelsLoading.value = false
+  }
+}
+
+onMounted(() => {
+  const stored = localStorage.getItem('tephra_recent_searches')
+  if (stored) {
+    recentSearches.value = JSON.parse(stored)
+  }
+  fetchLabels()
+})
 
 const categoryColors: Record<string, { bg: string; text: string; border: string }> = {
   exchange: { bg: 'bg-blue-500/10', text: 'text-blue-400', border: 'border-blue-500/20' },
   whale: { bg: 'bg-purple-500/10', text: 'text-purple-400', border: 'border-purple-500/20' },
   validator: { bg: 'bg-green-500/10', text: 'text-green-400', border: 'border-green-500/20' },
-  smart_money: { bg: 'bg-amber-500/10', text: 'text-amber-400', border: 'border-amber-500/20' },
-  protocol: { bg: 'bg-cyan-500/10', text: 'text-cyan-400', border: 'border-cyan-500/20' },
-  bridge: { bg: 'bg-orange-500/10', text: 'text-orange-400', border: 'border-orange-500/20' },
+  'smart-money': { bg: 'bg-amber-500/10', text: 'text-amber-400', border: 'border-amber-500/20' },
+  bot: { bg: 'bg-red-500/10', text: 'text-red-400', border: 'border-red-500/20' },
+  contract: { bg: 'bg-cyan-500/10', text: 'text-cyan-400', border: 'border-cyan-500/20' },
+  foundation: { bg: 'bg-emerald-500/10', text: 'text-emerald-400', border: 'border-emerald-500/20' },
+  custom: { bg: 'bg-slate-500/10', text: 'text-slate-400', border: 'border-slate-500/20' },
+}
+
+const shortenAddress = (addr: string, chars = 8) => {
+  if (!addr || addr.length <= chars * 2 + 3) return addr
+  return `${addr.slice(0, chars)}...${addr.slice(-chars)}`
 }
 </script>
 
@@ -129,20 +153,49 @@ const categoryColors: Record<string, { bg: string; text: string; border: string 
                 <h2 class="text-lg font-semibold text-white">Labeled Addresses</h2>
                 <p class="text-sm text-slate-500">Known addresses with labels</p>
               </div>
-              <UiBadge variant="primary" size="sm">
-                {{ labeledAddresses.length }} addresses
-              </UiBadge>
+              <div class="flex items-center gap-2">
+                <button 
+                  class="p-1.5 rounded-lg hover:bg-surface-700/50 transition-colors"
+                  @click="fetchLabels"
+                  :disabled="labelsLoading"
+                >
+                  <Icon name="mdi:refresh" :class="['w-4 h-4 text-slate-400', labelsLoading && 'animate-spin']" />
+                </button>
+                <UiBadge variant="primary" size="sm">
+                  {{ labeledAddresses.length }} labels
+                </UiBadge>
+              </div>
             </div>
           </div>
           
-          <div class="divide-y divide-surface-700/50">
+          <!-- Loading state -->
+          <div v-if="labelsLoading" class="divide-y divide-surface-700/50">
+            <div v-for="i in 4" :key="i" class="p-4">
+              <div class="flex items-center gap-3">
+                <UiSkeleton variant="custom" width="40px" height="40px" rounded="xl" />
+                <div class="flex-1">
+                  <UiSkeleton variant="text" width="150px" class="mb-2" />
+                  <UiSkeleton variant="text" width="200px" height="12px" />
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Empty state -->
+          <div v-else-if="labeledAddresses.length === 0" class="p-8 text-center">
+            <Icon name="mdi:label-off" class="w-12 h-12 text-slate-600 mx-auto mb-3" />
+            <p class="text-slate-500 mb-2">No labeled addresses yet</p>
+            <p class="text-sm text-slate-600">Search for an address and add labels to start building your directory</p>
+          </div>
+          
+          <div v-else class="divide-y divide-surface-700/50">
             <div
               v-for="addr in labeledAddresses"
-              :key="addr.address"
+              :key="addr.address + addr.label"
               class="p-4 hover:bg-surface-800/30 transition-colors cursor-pointer"
               @click="router.push(`/address/${addr.address}`)"
             >
-              <div class="flex items-center justify-between mb-2">
+              <div class="flex items-center justify-between">
                 <div class="flex items-center gap-3">
                   <div 
                     :class="[
@@ -154,24 +207,26 @@ const categoryColors: Record<string, { bg: string; text: string; border: string 
                       :name="addr.category === 'exchange' ? 'mdi:bank' :
                              addr.category === 'whale' ? 'mdi:fish' :
                              addr.category === 'validator' ? 'mdi:server' :
-                             addr.category === 'smart_money' ? 'mdi:brain' :
-                             addr.category === 'protocol' ? 'mdi:code-braces' : 'mdi:bridge'"
+                             addr.category === 'smart-money' ? 'mdi:brain' :
+                             addr.category === 'bot' ? 'mdi:robot' :
+                             addr.category === 'contract' ? 'mdi:file-code' :
+                             addr.category === 'foundation' ? 'mdi:shield-check' : 'mdi:label'"
                       :class="['w-5 h-5', categoryColors[addr.category]?.text || 'text-slate-400']"
                     />
                   </div>
                   <div>
                     <p class="text-white font-medium">{{ addr.label }}</p>
-                    <code class="text-xs text-slate-500 font-mono">{{ addr.address }}</code>
+                    <code class="text-xs text-slate-500 font-mono">{{ shortenAddress(addr.address) }}</code>
                   </div>
                 </div>
                 <div class="text-right">
-                  <p class="text-white font-medium">{{ addr.balance }}</p>
                   <UiBadge 
                     :class="[categoryColors[addr.category]?.bg, categoryColors[addr.category]?.text, categoryColors[addr.category]?.border]"
                     size="sm"
                   >
-                    {{ addr.category.replace('_', ' ') }}
+                    {{ addr.category?.replace('-', ' ') || 'custom' }}
                   </UiBadge>
+                  <p class="text-xs text-slate-600 mt-1">{{ addr.source }}</p>
                 </div>
               </div>
             </div>

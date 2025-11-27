@@ -3,7 +3,31 @@ definePageMeta({
   layout: 'dashboard',
 })
 
-// Time range selection
+// Analytics data
+const analyticsData = ref<any>(null)
+const loading = ref(true)
+const isMock = ref(false)
+
+const fetchAnalytics = async () => {
+  loading.value = true
+  try {
+    const response = await $fetch<{ success: boolean; data: any; mock?: boolean }>('/api/analytics/overview')
+    if (response.success) {
+      analyticsData.value = response.data
+      isMock.value = response.mock || false
+    }
+  } catch (e) {
+    console.error('Failed to fetch analytics:', e)
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(() => {
+  fetchAnalytics()
+})
+
+// Time range selection (for future use with historical data)
 const timeRange = ref('7d')
 const timeRanges = [
   { value: '24h', label: '24 Hours' },
@@ -12,73 +36,59 @@ const timeRanges = [
   { value: '90d', label: '90 Days' },
 ]
 
-// Mock chart data - transactions over time
-const transactionData = computed(() => {
-  const days = timeRange.value === '24h' ? 24 : 
-               timeRange.value === '7d' ? 7 :
-               timeRange.value === '30d' ? 30 : 90
-  
-  return Array.from({ length: days }, (_, i) => ({
-    label: timeRange.value === '24h' ? `${i}:00` : `Day ${i + 1}`,
-    value: Math.floor(Math.random() * 5000) + 1000,
-  }))
+// Computed metrics from real data
+const metrics = computed(() => {
+  if (!analyticsData.value) return []
+  const m = analyticsData.value.metrics
+  return [
+    {
+      title: 'Block Height',
+      value: m.latestBlock?.toLocaleString() || '...',
+      change: 'Live',
+      positive: true,
+      icon: 'mdi:cube-outline',
+      color: 'primary',
+    },
+    {
+      title: 'Validators',
+      value: m.totalValidators?.toString() || '...',
+      change: 'Active',
+      positive: true,
+      icon: 'mdi:server',
+      color: 'green',
+    },
+    {
+      title: 'Avg Block Time',
+      value: m.avgBlockTime ? `${m.avgBlockTime}s` : '...',
+      change: 'Target: 6s',
+      positive: true,
+      icon: 'mdi:clock',
+      color: 'amber',
+    },
+    {
+      title: 'Network TPS',
+      value: m.tps || '...',
+      change: 'tx/sec',
+      positive: true,
+      icon: 'mdi:speedometer',
+      color: 'blue',
+    },
+  ]
 })
 
-// Mock metrics
-const metrics = ref([
-  {
-    title: 'Total Transactions',
-    value: '2.84M',
-    change: '+12.5%',
-    positive: true,
-    icon: 'mdi:swap-horizontal',
-    color: 'primary',
-  },
-  {
-    title: 'Active Addresses',
-    value: '125.8K',
-    change: '+8.2%',
-    positive: true,
-    icon: 'mdi:wallet',
-    color: 'green',
-  },
-  {
-    title: 'Avg Block Time',
-    value: '6.2s',
-    change: '-0.3s',
-    positive: true,
-    icon: 'mdi:clock',
-    color: 'amber',
-  },
-  {
-    title: 'Network TPS',
-    value: '42.5',
-    change: '+5.1%',
-    positive: true,
-    icon: 'mdi:speedometer',
-    color: 'blue',
-  },
-])
+// Transaction types from real data
+const txTypes = computed(() => {
+  return analyticsData.value?.txTypes || []
+})
 
-// Top transaction types
-const txTypes = ref([
-  { type: 'Transfer', count: 1250000, percent: 44 },
-  { type: 'Delegate', count: 850000, percent: 30 },
-  { type: 'BTC Stake', count: 420000, percent: 15 },
-  { type: 'Undelegate', count: 200000, percent: 7 },
-  { type: 'Vote', count: 120000, percent: 4 },
-])
-
-// Volume data
-const volumeData = ref([
-  { label: 'Mon', value: 12500000 },
-  { label: 'Tue', value: 15800000 },
-  { label: 'Wed', value: 11200000 },
-  { label: 'Thu', value: 18900000 },
-  { label: 'Fri', value: 22100000 },
-  { label: 'Sat', value: 16700000 },
-  { label: 'Sun', value: 14300000 },
-])
+// Volume data from recent blocks
+const volumeData = computed(() => {
+  if (!analyticsData.value?.recentBlocks) return []
+  return analyticsData.value.recentBlocks.map((b: any) => ({
+    label: `#${b.height}`,
+    value: b.txCount,
+  })).reverse()
+})
 
 const colorMap = {
   primary: 'text-primary-400',
@@ -103,25 +113,43 @@ const typeColors = ['bg-primary-500', 'bg-amber-500', 'bg-green-500', 'bg-blue-5
     <!-- Page header -->
     <div class="flex items-center justify-between mb-8">
       <div>
-        <h1 class="text-2xl font-bold text-white mb-2">Analytics</h1>
+        <div class="flex items-center gap-3 mb-2">
+          <h1 class="text-2xl font-bold text-white">Analytics</h1>
+          <div v-if="isMock" class="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
+            <Icon name="mdi:database-off" class="w-3 h-3 text-yellow-400" />
+            <span class="text-xs text-yellow-400">Demo</span>
+          </div>
+        </div>
         <p class="text-slate-400">On-chain metrics and network analysis</p>
       </div>
       
-      <!-- Time range selector -->
-      <div class="flex items-center gap-2 bg-surface-800/50 rounded-xl p-1">
-        <button
-          v-for="range in timeRanges"
-          :key="range.value"
-          :class="[
-            'px-4 py-2 rounded-lg text-sm font-medium transition-colors',
-            timeRange === range.value 
-              ? 'bg-primary-500 text-white' 
-              : 'text-slate-400 hover:text-white hover:bg-surface-700/50'
+      <div class="flex items-center gap-3">
+        <!-- Refresh button -->
+        <button 
+          class="flex items-center gap-2 px-4 py-2 rounded-xl border border-surface-700 hover:border-primary-500/50 transition-colors"
+          @click="fetchAnalytics"
+          :disabled="loading"
+        >
+          <Icon name="mdi:refresh" :class="['w-4 h-4 text-slate-400', loading && 'animate-spin']" />
+          <span class="text-sm text-slate-400">Refresh</span>
+        </button>
+        
+        <!-- Time range selector (for future historical data) -->
+        <div class="flex items-center gap-2 bg-surface-800/50 rounded-xl p-1">
+          <button
+            v-for="range in timeRanges"
+            :key="range.value"
+            :class="[
+              'px-4 py-2 rounded-lg text-sm font-medium transition-colors',
+              timeRange === range.value 
+                ? 'bg-primary-500 text-white' 
+                : 'text-slate-400 hover:text-white hover:bg-surface-700/50'
           ]"
           @click="timeRange = range.value"
         >
           {{ range.label }}
         </button>
+        </div>
       </div>
     </div>
     

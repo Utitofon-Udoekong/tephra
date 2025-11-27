@@ -31,14 +31,32 @@ const fetchTransactions = async () => {
   }
 }
 
+// Labels for this address
+const labels = ref<any[]>([])
+const labelsLoading = ref(true)
+
+// Fetch labels from API
+const fetchLabels = async () => {
+  labelsLoading.value = true
+  try {
+    const response = await $fetch<{ success: boolean; data: any[] }>(`/api/addresses/${address.value}/labels`)
+    if (response.success) {
+      labels.value = response.data.map(l => ({
+        ...l,
+        color: getCategoryColor(l.category),
+      }))
+    }
+  } catch (e) {
+    console.error('Failed to fetch labels:', e)
+  } finally {
+    labelsLoading.value = false
+  }
+}
+
 onMounted(() => {
   fetchTransactions()
+  fetchLabels()
 })
-
-// Labels for this address
-const labels = ref([
-  { id: '1', label: 'Active Staker', source: 'heuristic', confidence: 0.95, color: 'primary' },
-])
 
 // Label categories for dropdown
 const labelCategories = [
@@ -52,26 +70,49 @@ const labelCategories = [
   { value: 'custom', label: 'Custom', icon: 'mdi:label', color: 'slate' },
 ]
 
+const getCategoryColor = (category: string): string => {
+  const found = labelCategories.find(c => c.value === category)
+  return found?.color || 'slate'
+}
+
 // Add label modal
 const showAddLabelModal = ref(false)
 const selectedCategory = ref('')
 const customLabel = ref('')
 const labelNotes = ref('')
+const addingLabel = ref(false)
 
-const addLabel = () => {
+const addLabel = async () => {
   const category = labelCategories.find(c => c.value === selectedCategory.value)
   if (!category) return
   
   const labelText = selectedCategory.value === 'custom' ? customLabel.value : category.label
   
   if (labelText) {
-    labels.value.push({
-      id: Date.now().toString(),
-      label: labelText,
-      source: 'manual',
-      confidence: 1.0,
-      color: category.color,
-    })
+    addingLabel.value = true
+    try {
+      const response = await $fetch<{ success: boolean; data: any }>('/api/labels', {
+        method: 'POST',
+        body: {
+          address: address.value,
+          label: labelText,
+          category: selectedCategory.value,
+          confidence: 1.0,
+          source: 'manual',
+        },
+      })
+      
+      if (response.success) {
+        labels.value.push({
+          ...response.data,
+          color: category.color,
+        })
+      }
+    } catch (e) {
+      console.error('Failed to add label:', e)
+    } finally {
+      addingLabel.value = false
+    }
     
     // Reset form
     showAddLabelModal.value = false
@@ -81,8 +122,13 @@ const addLabel = () => {
   }
 }
 
-const removeLabel = (id: string) => {
-  labels.value = labels.value.filter(l => l.id !== id)
+const removeLabel = async (id: number | string) => {
+  try {
+    await $fetch(`/api/labels/${id}`, { method: 'DELETE' })
+    labels.value = labels.value.filter(l => l.id !== id)
+  } catch (e) {
+    console.error('Failed to remove label:', e)
+  }
 }
 
 const copyAddress = () => {
