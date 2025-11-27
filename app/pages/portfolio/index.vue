@@ -206,10 +206,6 @@ const removeWallet = async (id: number) => {
             <div v-else class="w-full h-full rounded-full bg-surface-800 flex items-center justify-center">
               <Icon name="mdi:wallet" class="w-8 h-8 text-primary-400" />
             </div>
-              <div class="absolute inset-3 rounded-full bg-surface-900 flex items-center justify-center">
-                <Icon name="mdi:wallet" class="w-8 h-8 text-primary-400" />
-              </div>
-            </div>
           </div>
           
           <div class="space-y-2">
