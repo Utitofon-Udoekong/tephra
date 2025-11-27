@@ -52,7 +52,6 @@ const navGroups: NavGroup[] = [
     items: [
       { label: 'BTC Staking', to: '/babylon/staking', icon: 'mdi:bitcoin' },
       { label: 'Finality Providers', to: '/babylon/finality', icon: 'mdi:server' },
-      { label: 'Epochs', to: '/babylon/epochs', icon: 'mdi:clock-outline' },
     ],
   },
 ]

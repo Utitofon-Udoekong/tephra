@@ -190,24 +190,27 @@ const typeColors = ['bg-primary-500', 'bg-amber-500', 'bg-green-500', 'bg-blue-5
         </div>
         
         <!-- Simple bar chart visualization -->
-        <div class="h-48 flex items-end gap-1">
+        <div v-if="volumeData.length > 0" class="h-48 flex items-end gap-1">
           <div
             v-for="(item, index) in volumeData.slice(-14)"
             :key="index"
             class="flex-1 bg-primary-500/20 hover:bg-primary-500/30 rounded-t transition-colors relative group"
-            :style="{ height: `${(item.value / 6000) * 100}%` }"
+            :style="{ height: `${Math.max((item.value / Math.max(...volumeData.map(v => v.value), 1)) * 100, 5)}%` }"
           >
-            <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-surface-800 rounded text-xs text-white opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+            <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-surface-800 rounded text-xs text-white opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
               {{ item.value.toLocaleString() }} txs
             </div>
           </div>
         </div>
+        <div v-else class="h-48 flex items-center justify-center text-slate-500 text-sm">
+          No data available
+        </div>
         
         <!-- X-axis labels -->
-        <div class="flex justify-between mt-2 text-xs text-slate-500">
-          <span>{{ volumeData[0]?.label }}</span>
-          <span>{{ volumeData[Math.floor(volumeData.length / 2)]?.label }}</span>
-          <span>{{ volumeData[volumeData.length - 1]?.label }}</span>
+        <div v-if="volumeData.length > 0" class="flex justify-between mt-2 text-xs text-slate-500">
+          <span>{{ volumeData[0]?.label || '' }}</span>
+          <span>{{ volumeData[Math.floor(volumeData.length / 2)]?.label || '' }}</span>
+          <span>{{ volumeData[volumeData.length - 1]?.label || '' }}</span>
         </div>
       </UiCard>
       
@@ -219,7 +222,7 @@ const typeColors = ['bg-primary-500', 'bg-amber-500', 'bg-green-500', 'bg-blue-5
         </div>
         
         <!-- Bar chart -->
-        <div class="h-48 flex items-end gap-2">
+        <div v-if="volumeData.length > 0" class="h-48 flex items-end gap-2">
           <div
             v-for="(item, index) in volumeData"
             :key="index"
@@ -227,10 +230,13 @@ const typeColors = ['bg-primary-500', 'bg-amber-500', 'bg-green-500', 'bg-blue-5
           >
             <div 
               class="w-full bg-gradient-to-t from-amber-500/50 to-amber-500/20 hover:from-amber-500/70 hover:to-amber-500/30 rounded-t transition-colors"
-              :style="{ height: `${(item.value / 25000000) * 100}%` }"
+              :style="{ height: `${Math.max((item.value / Math.max(...volumeData.map(v => v.value), 1)) * 100, 5)}%` }"
             />
             <span class="text-xs text-slate-500 mt-2">{{ item.label }}</span>
           </div>
+        </div>
+        <div v-else class="h-48 flex items-center justify-center text-slate-500 text-sm">
+          No data available
         </div>
       </UiCard>
     </div>
@@ -241,7 +247,7 @@ const typeColors = ['bg-primary-500', 'bg-amber-500', 'bg-green-500', 'bg-blue-5
       <UiCard variant="default" padding="md">
         <h3 class="text-lg font-semibold text-white mb-6">Transaction Types</h3>
         
-        <div class="space-y-4">
+        <div v-if="txTypes.length > 0" class="space-y-4">
           <div
             v-for="(tx, index) in txTypes"
             :key="tx.type"
@@ -258,6 +264,9 @@ const typeColors = ['bg-primary-500', 'bg-amber-500', 'bg-green-500', 'bg-blue-5
               />
             </div>
           </div>
+        </div>
+        <div v-else class="text-center text-slate-500 text-sm py-8">
+          No transaction data available
         </div>
       </UiCard>
       
