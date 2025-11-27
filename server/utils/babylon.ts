@@ -154,16 +154,8 @@ class BabylonLCDClient {
 
   constructor() {
     const config = useRuntimeConfig()
-    console.log('[Babylon LCD] Config:', JSON.stringify({
-      babylonLcdUrl: config.babylonLcdUrl,
-      babylonRpcUrl: config.babylonRpcUrl,
-    }))
     this.baseUrl = config.babylonLcdUrl as string || 'https://babylon-testnet-api.polkachu.com'
     this.chainId = config.public?.babylonChainId || 'bbn-test-6'
-  }
-
-  getBaseUrl(): string {
-    return this.baseUrl
   }
 
   async fetch<T>(path: string, useCache = true): Promise<T> {
@@ -374,13 +366,8 @@ let _client: BabylonLCDClient | null = null
 export function getBabylonClient(): BabylonLCDClient {
   if (!_client) {
     _client = new BabylonLCDClient()
-    console.log('[Babylon LCD] Initialized client with baseUrl:', _client.getBaseUrl())
   }
   return _client
-}
-
-export function resetBabylonClient(): void {
-  _client = null
 }
 
 // ============================================
