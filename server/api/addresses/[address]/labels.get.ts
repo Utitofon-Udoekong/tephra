@@ -12,7 +12,7 @@ export default defineEventHandler(async (event) => {
   }
   
   try {
-    const db = getDatabase()
+    const db = getDatabase() as any
     
     // Get all labels for this address
     const labels = await db

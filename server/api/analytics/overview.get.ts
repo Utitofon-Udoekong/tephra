@@ -51,7 +51,9 @@ export default defineEventHandler(async (event) => {
     const avgBlockTime = blocks.length > 1
       ? blocks.slice(0, -1).reduce((sum, block, i) => {
           const currentTime = new Date(block.block.header.time).getTime()
-          const nextTime = new Date(blocks[i + 1].block.header.time).getTime()
+          const nextBlock = blocks[i + 1]
+          if (!nextBlock) return sum
+          const nextTime = new Date(nextBlock.block.header.time).getTime()
           return sum + (currentTime - nextTime)
         }, 0) / (blocks.length - 1) / 1000
       : 6

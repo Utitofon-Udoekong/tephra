@@ -1,5 +1,6 @@
 import { getBabylonClient, shortenAddress, formatBBNAmount } from '../../utils/babylon'
 import { getDatabase, addressLabels, addresses } from '../../utils/db'
+import { autoLabelOnAnalysis } from '../../utils/labeling'
 import { eq } from 'drizzle-orm'
 
 interface RiskAnalysis {
@@ -143,6 +144,19 @@ export default defineEventHandler(async (event) => {
     // Clamp score
     riskScore = Math.max(0, Math.min(100, riskScore))
     
+    // Auto-label based on analysis (heuristic-based labeling)
+    await autoLabelOnAnalysis(address, {
+      isValidator,
+      isFinalityProvider,
+      balanceLevel,
+    })
+    
+    // Refresh labels after auto-labeling
+    const updatedLabels = await db
+      .select()
+      .from(addressLabels)
+      .where(eq(addressLabels.address, address))
+    
     const result: RiskAnalysis = {
       address,
       addressShort: shortenAddress(address),
@@ -151,7 +165,7 @@ export default defineEventHandler(async (event) => {
       riskColor: getRiskColor(riskScore),
       lastChecked: new Date().toISOString(),
       flags,
-      labels: dbLabels.map(l => l.label),
+      labels: updatedLabels.map(l => l.label),
       metrics: {
         balance: formatBBNAmount(balanceRaw),
         balanceRaw,

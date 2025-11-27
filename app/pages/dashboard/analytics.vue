@@ -192,7 +192,7 @@ const typeColors = ['bg-primary-500', 'bg-amber-500', 'bg-green-500', 'bg-blue-5
         <!-- Simple bar chart visualization -->
         <div class="h-48 flex items-end gap-1">
           <div
-            v-for="(item, index) in transactionData.slice(-14)"
+            v-for="(item, index) in volumeData.slice(-14)"
             :key="index"
             class="flex-1 bg-primary-500/20 hover:bg-primary-500/30 rounded-t transition-colors relative group"
             :style="{ height: `${(item.value / 6000) * 100}%` }"
@@ -205,9 +205,9 @@ const typeColors = ['bg-primary-500', 'bg-amber-500', 'bg-green-500', 'bg-blue-5
         
         <!-- X-axis labels -->
         <div class="flex justify-between mt-2 text-xs text-slate-500">
-          <span>{{ transactionData[0]?.label }}</span>
-          <span>{{ transactionData[Math.floor(transactionData.length / 2)]?.label }}</span>
-          <span>{{ transactionData[transactionData.length - 1]?.label }}</span>
+          <span>{{ volumeData[0]?.label }}</span>
+          <span>{{ volumeData[Math.floor(volumeData.length / 2)]?.label }}</span>
+          <span>{{ volumeData[volumeData.length - 1]?.label }}</span>
         </div>
       </UiCard>
       

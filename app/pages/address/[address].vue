@@ -229,8 +229,8 @@ const getLabelColorClass = (color: string) => {
               <Icon name="mdi:label" class="w-3 h-3 mr-1" />
               {{ label.label }}
             </UiBadge>
-            <UiBadge variant="neutral" size="md">
-              {{ addressData.data?.accountType || 'Account' }}
+            <UiBadge v-if="addressData.data && 'accountType' in addressData.data" variant="neutral" size="md">
+              {{ (addressData.data as any).accountType || 'Account' }}
             </UiBadge>
           </div>
         </div>
@@ -252,13 +252,13 @@ const getLabelColorClass = (color: string) => {
         
         <UiCard variant="default" padding="md" class="text-center">
           <Icon name="mdi:counter" class="w-6 h-6 text-green-400 mx-auto mb-2" />
-          <div class="text-2xl font-bold text-white">{{ addressData.data?.sequence || '0' }}</div>
+          <div class="text-2xl font-bold text-white">{{ (addressData.data && 'sequence' in addressData.data) ? (addressData.data as any).sequence : '0' }}</div>
           <div class="text-xs text-slate-500">Sequence</div>
         </UiCard>
         
         <UiCard variant="default" padding="md" class="text-center">
           <Icon name="mdi:identifier" class="w-6 h-6 text-blue-400 mx-auto mb-2" />
-          <div class="text-2xl font-bold text-white">#{{ addressData.data?.accountNumber || '0' }}</div>
+          <div class="text-2xl font-bold text-white">#{{ (addressData.data && 'accountNumber' in addressData.data) ? (addressData.data as any).accountNumber : '0' }}</div>
           <div class="text-xs text-slate-500">Account Number</div>
         </UiCard>
       </div>

@@ -37,14 +37,17 @@ export default defineNuxtConfig({
 
   runtimeConfig: {
     // Private keys (server-only)
-    authSecret: process.env.NUXT_AUTH_SECRET || 'tephra-dev-secret',
-    babylonRpcUrl: process.env.NUXT_BABYLON_RPC_URL || 'https://babylon-testnet-rpc.polkachu.com',
-    babylonLcdUrl: process.env.NUXT_BABYLON_LCD_URL || 'https://babylon-testnet-api.polkachu.com',
+    authSecret: process.env.AUTH_SECRET || 'tephra-dev-secret',
+    babylonRpcUrl: process.env.BABYLON_RPC_URL || 'https://babylon-testnet-rpc.polkachu.com',
+    babylonLcdUrl: process.env.BABYLON_LCD_URL || 'https://babylon-testnet-api.polkachu.com',
+    tursoDatabaseUrl: process.env.TURSO_DATABASE_URL,
+    tursoAuthToken: process.env.TURSO_AUTH_TOKEN,
+    databaseUrl: process.env.DATABASE_URL,
     // Public keys (exposed to client)
     public: {
       appName: 'Tephra',
-      appUrl: process.env.NUXT_PUBLIC_APP_URL || 'http://localhost:3000',
-      babylonChainId: process.env.NUXT_BABYLON_CHAIN_ID || 'bbn-test-6',
+      appUrl: process.env.PUBLIC_APP_URL || 'http://localhost:3000',
+      babylonChainId: process.env.BABYLON_CHAIN_ID || 'bbn-test-6',
     },
   },
 

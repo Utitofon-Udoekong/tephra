@@ -158,7 +158,7 @@ class BabylonLCDClient {
     this.chainId = config.public?.babylonChainId || 'bbn-test-6'
   }
 
-  async fetch<T>(path: string, useCache = true): Promise<T> {
+  async fetch<T>(path: string, useCache = true, silent = false): Promise<T> {
     const cacheKey = path
     const now = Date.now()
 
@@ -179,7 +179,12 @@ class BabylonLCDClient {
       })
 
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+        const error = new Error(`HTTP ${response.status}: ${response.statusText}`)
+        // Only log non-5xx errors or if not silent
+        if (!silent && response.status < 500) {
+          console.error(`[Babylon LCD] Error fetching ${path}:`, error)
+        }
+        throw error
       }
 
       const data = await response.json()
@@ -190,8 +195,11 @@ class BabylonLCDClient {
       }
 
       return data as T
-    } catch (error) {
-      console.error(`[Babylon LCD] Error fetching ${path}:`, error)
+    } catch (error: any) {
+      // Only log if not silent and not a 5xx error
+      if (!silent && (!error.message || !error.message.includes('HTTP 5'))) {
+        console.error(`[Babylon LCD] Error fetching ${path}:`, error)
+      }
       throw error
     }
   }
@@ -213,7 +221,8 @@ class BabylonLCDClient {
   }
 
   async getBlockByHeight(height: number): Promise<BabylonBlock> {
-    return this.fetch<BabylonBlock>(`/cosmos/base/tendermint/v1beta1/blocks/${height}`)
+    // Use silent mode for historical blocks that may not be available
+    return this.fetch<BabylonBlock>(`/cosmos/base/tendermint/v1beta1/blocks/${height}`, true, true)
   }
 
   async getRecentBlocks(count = 10): Promise<BabylonBlock[]> {
@@ -232,6 +241,7 @@ class BabylonLCDClient {
       if (result.status === 'fulfilled') {
         blocks.push(result.value)
       }
+      // Silently ignore failed block fetches (some blocks may not be available)
     })
     
     return blocks
@@ -242,7 +252,8 @@ class BabylonLCDClient {
   // ============================================
 
   async getTransactionsByHeight(height: number): Promise<{ tx_responses: BabylonTransaction[] }> {
-    return this.fetch(`/cosmos/tx/v1beta1/txs?events=tx.height=${height}`)
+    // Use silent mode to suppress expected 500 errors from API
+    return this.fetch(`/cosmos/tx/v1beta1/txs?events=tx.height=${height}`, true, true)
   }
 
   async getTransactionByHash(hash: string): Promise<{ tx_response: BabylonTransaction }> {
@@ -250,8 +261,22 @@ class BabylonLCDClient {
   }
 
   async getRecentTransactions(limit = 20): Promise<BabylonTransaction[]> {
-    // Get transactions from recent blocks
-    const blocks = await this.getRecentBlocks(5)
+    // Try using the paginated endpoint first (more reliable)
+    try {
+      const result = await this.fetch<{ tx_responses: BabylonTransaction[]; pagination: any }>(
+        `/cosmos/tx/v1beta1/txs?pagination.limit=${limit}&order_by=ORDER_BY_DESC`,
+        true,
+        false
+      )
+      if (result.tx_responses && result.tx_responses.length > 0) {
+        return result.tx_responses.slice(0, limit)
+      }
+    } catch (error) {
+      // Fall back to block-by-block method if paginated endpoint fails
+    }
+
+    // Fallback: Get transactions from recent blocks (with silent error handling)
+    const blocks = await this.getRecentBlocks(Math.min(10, limit))
     const transactions: BabylonTransaction[] = []
 
     for (const block of blocks) {
@@ -265,7 +290,7 @@ class BabylonLCDClient {
           transactions.push(...txsResult.tx_responses)
         }
       } catch (error) {
-        // Skip blocks with errors
+        // Silently skip blocks with errors (API may not have all block data)
         continue
       }
     }

@@ -189,15 +189,23 @@ const removeWallet = async (id: number) => {
           <div class="relative w-32 h-32">
             <!-- Simple pie chart using conic-gradient -->
             <div 
+              v-if="holdings.length >= 2"
               class="w-full h-full rounded-full"
               :style="{
                 background: `conic-gradient(
-                  #f59e0b 0% ${holdings[0].allocation}%, 
-                  #f97316 ${holdings[0].allocation}% ${holdings[0].allocation + holdings[1].allocation}%, 
-                  #a855f7 ${holdings[0].allocation + holdings[1].allocation}% 100%
+                  #f59e0b 0% ${holdings[0]?.allocation || 0}%, 
+                  #f97316 ${holdings[0]?.allocation || 0}% ${(holdings[0]?.allocation || 0) + (holdings[1]?.allocation || 0)}%, 
+                  #a855f7 ${(holdings[0]?.allocation || 0) + (holdings[1]?.allocation || 0)}% 100%
                 )`
               }"
             >
+              <div class="absolute inset-3 rounded-full bg-surface-900 flex items-center justify-center">
+                <Icon name="mdi:wallet" class="w-8 h-8 text-primary-400" />
+              </div>
+            </div>
+            <div v-else class="w-full h-full rounded-full bg-surface-800 flex items-center justify-center">
+              <Icon name="mdi:wallet" class="w-8 h-8 text-primary-400" />
+            </div>
               <div class="absolute inset-3 rounded-full bg-surface-900 flex items-center justify-center">
                 <Icon name="mdi:wallet" class="w-8 h-8 text-primary-400" />
               </div>

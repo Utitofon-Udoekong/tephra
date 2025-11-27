@@ -7,7 +7,7 @@ export default defineEventHandler(async (event) => {
   const category = query.category as string | undefined
   
   try {
-    const db = getDatabase()
+    const db = getDatabase() as any
     
     // Get labels with optional category filter
     let labelsQuery = db
@@ -27,19 +27,19 @@ export default defineEventHandler(async (event) => {
     const labels = await labelsQuery
     
     // Get unique categories for filter
-    const categoriesResult = await db
+    const categoriesResult = await (db as any)
       .selectDistinct({ category: addressLabels.category })
       .from(addressLabels)
     
     const categories = categoriesResult
-      .map(c => c.category)
+      .map((c: { category: string | null }) => c.category)
       .filter(Boolean) as string[]
     
     return {
       success: true,
       data: {
         labels: category 
-          ? labels.filter(l => l.category === category)
+          ? labels.filter((l: any) => l.category === category)
           : labels,
         categories,
         total: labels.length,

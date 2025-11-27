@@ -1,5 +1,7 @@
 import Database from 'better-sqlite3'
-import { drizzle } from 'drizzle-orm/better-sqlite3'
+import { createClient } from '@libsql/client'
+import { drizzle as drizzleSQLite } from 'drizzle-orm/better-sqlite3'
+import { drizzle as drizzleLibSQL } from 'drizzle-orm/libsql'
 import { sql } from 'drizzle-orm'
 import { sqliteTable, text, integer, real } from 'drizzle-orm/sqlite-core'
 
@@ -106,29 +108,62 @@ export const btcDelegations = sqliteTable('btc_delegations', {
 // Database Connection
 // ============================================
 
-let _db: ReturnType<typeof drizzle> | null = null
+let _db: ReturnType<typeof drizzleSQLite> | ReturnType<typeof drizzleLibSQL> | null = null
 let _sqlite: Database.Database | null = null
+let _libsql: ReturnType<typeof createClient> | null = null
+let _isTurso = false
 
 export function getDatabase() {
   if (!_db) {
-    // Use in-memory database for development, file for production
-    const dbPath = process.env.DATABASE_URL?.replace('file:', '') || ':memory:'
+    const config = useRuntimeConfig()
+    const tursoUrl = config.tursoDatabaseUrl
+    const tursoToken = config.tursoAuthToken
+    const dbUrl = config.databaseUrl || ''
     
-    try {
-      _sqlite = new Database(dbPath)
-      _db = drizzle(_sqlite)
+    // Check if we're using Turso (libSQL)
+    if (tursoUrl || dbUrl.startsWith('libsql://') || dbUrl.startsWith('turso://')) {
+      _isTurso = true
       
-      // Initialize schema
-      initializeSchema(_sqlite)
+      try {
+        // Use Turso/libSQL client
+        const url = tursoUrl || dbUrl
+        if (!url) {
+          throw new Error('Turso database URL is required')
+        }
+        
+        _libsql = createClient({
+          url,
+          authToken: tursoToken || '',
+        })
+        
+        _db = drizzleLibSQL(_libsql)
+        
+        console.log(`[DB] Connected to Turso/libSQL: ${url.replace(/\/\/.*@/, '//***@')}`)
+      } catch (error) {
+        console.error('[DB] Failed to connect to Turso:', error)
+        throw error
+      }
+    } else {
+      // Use local SQLite (better-sqlite3)
+      _isTurso = false
+      const dbPath = dbUrl.replace('file:', '') || ':memory:'
       
-      console.log(`[DB] Connected to SQLite: ${dbPath === ':memory:' ? 'in-memory' : dbPath}`)
-    } catch (error) {
-      console.error('[DB] Failed to connect:', error)
-      // Fallback to in-memory
-      _sqlite = new Database(':memory:')
-      _db = drizzle(_sqlite)
-      initializeSchema(_sqlite)
-      console.log('[DB] Using in-memory database (fallback)')
+      try {
+        _sqlite = new Database(dbPath)
+        _db = drizzleSQLite(_sqlite)
+        
+        // Initialize schema for SQLite
+        initializeSchema(_sqlite)
+        
+        console.log(`[DB] Connected to SQLite: ${dbPath === ':memory:' ? 'in-memory' : dbPath}`)
+      } catch (error) {
+        console.error('[DB] Failed to connect:', error)
+        // Fallback to in-memory
+        _sqlite = new Database(':memory:')
+        _db = drizzleSQLite(_sqlite)
+        initializeSchema(_sqlite)
+        console.log('[DB] Using in-memory database (fallback)')
+      }
     }
   }
   
@@ -136,19 +171,27 @@ export function getDatabase() {
 }
 
 export function getSqlite() {
+  if (_isTurso) {
+    throw new Error('Cannot use getSqlite() with Turso. Use getDatabase() instead.')
+  }
   if (!_sqlite) {
     getDatabase() // Initialize if not done
   }
   return _sqlite!
 }
 
+export async function initializeTursoSchema() {
+  if (_isTurso && _libsql) {
+    await initializeSchemaTurso(_libsql)
+  }
+}
+
 // ============================================
 // Schema Initialization
 // ============================================
 
-function initializeSchema(sqlite: Database.Database) {
-  // Create tables if they don't exist
-  sqlite.exec(`
+// Schema SQL (shared between SQLite and Turso)
+const schemaSQL = `
     CREATE TABLE IF NOT EXISTS blocks (
       height INTEGER PRIMARY KEY,
       hash TEXT NOT NULL,
@@ -244,7 +287,31 @@ function initializeSchema(sqlite: Database.Database) {
     CREATE INDEX IF NOT EXISTS idx_address_labels_address ON address_labels(address);
     CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
     CREATE INDEX IF NOT EXISTS idx_btc_delegations_staker ON btc_delegations(staker_address);
-  `)
+  `
+
+function initializeSchema(sqlite: Database.Database) {
+  // Create tables if they don't exist (for better-sqlite3)
+  sqlite.exec(schemaSQL)
+}
+
+async function initializeSchemaTurso(client: ReturnType<typeof createClient>) {
+  // Create tables if they don't exist (for Turso/libSQL)
+  // Split by semicolon and execute each statement
+  const statements = schemaSQL
+    .split(';')
+    .map(s => s.trim())
+    .filter(s => s.length > 0 && !s.startsWith('--'))
+  
+  for (const statement of statements) {
+    try {
+      await client.execute(statement)
+    } catch (error: any) {
+      // Ignore "table already exists" errors
+      if (!error.message?.includes('already exists') && !error.message?.includes('duplicate')) {
+        console.warn(`[DB] Schema init warning: ${error.message}`)
+      }
+    }
+  }
 }
 
 // ============================================

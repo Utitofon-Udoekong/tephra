@@ -14,13 +14,19 @@ export default defineEventHandler(async (event) => {
     ])
     
     // Get label statistics from database
-    const labelStats = await db
+    const labelStatsRaw = await (db as any)
       .select({
         category: addressLabels.category,
-        count: sql<number>`count(*)`,
+        count: sql<number>`count(*)`.as('count'),
       })
       .from(addressLabels)
       .groupBy(addressLabels.category)
+    
+    // Type assertion for count property
+    const labelStats = labelStatsRaw.map((l: any) => ({
+      category: l.category,
+      count: Number(l.count || 0),
+    }))
     
     // Format finality providers as entities
     const fpEntities = providersResult.finality_providers.slice(0, 10).map((fp: any) => ({
@@ -52,7 +58,7 @@ export default defineEventHandler(async (event) => {
     const entities = [...fpEntities, ...validatorEntities]
     
     // Calculate stats
-    const totalLabeled = labelStats.reduce((sum, l) => sum + Number(l.count), 0)
+    const totalLabeled = labelStats.reduce((sum: number, l: { category: string | null; count: number }) => sum + l.count, 0)
     const totalEntities = entities.length
     const activeEntities = entities.filter(e => e.active).length
     
@@ -65,7 +71,7 @@ export default defineEventHandler(async (event) => {
           activeEntities,
           totalLabeled,
           labelsByCategory: Object.fromEntries(
-            labelStats.map(l => [l.category || 'unknown', Number(l.count)])
+            labelStats.map((l: { category: string | null; count: number }) => [l.category || 'unknown', l.count])
           ),
         },
       },

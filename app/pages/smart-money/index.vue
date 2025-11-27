@@ -7,8 +7,9 @@ const router = useRouter()
 const { finalityProviders, transactions, fetchFinalityProviders, fetchTransactions, isLoading, isMock } = useBlockchain()
 
 // Fetch data on mount
-onMounted(() => {
-  fetchFinalityProviders()
+onMounted(async () => {
+  await fetchFinalityProviders()
+  await fetchTransactions(20)
 })
 
 // Transform finality providers into "smart money" format
@@ -26,8 +27,11 @@ const smartMoneyWallets = computed(() => {
     highestVotedHeight: fp.highestVotedHeight,
     // For "smart money" display
     pnl: fp.active ? 'Active' : 'Inactive',
+    pnlPercent: fp.active ? '+100%' : '0%',
     winRate: `${fp.commissionPercent}%`,
     trades: fp.highestVotedHeight || 0,
+    avgHoldTime: 'N/A',
+    lastActive: 'Recently',
     tags: [
       fp.active ? 'Active' : 'Inactive',
       'Finality Provider',
@@ -37,20 +41,13 @@ const smartMoneyWallets = computed(() => {
   }))
 })
 
-// Fetch recent transactions for whale movements
-const { transactions, fetchTransactions } = useBlockchain()
-
-onMounted(async () => {
-  await fetchFinalityProviders()
-  await fetchTransactions(20)
-})
-
 // Recent whale movements from transactions
 const whaleMovements = computed(() => {
   return transactions.value.slice(0, 5).map((tx: any) => ({
     address: tx.from || tx.to || 'Unknown',
     type: tx.type,
     amount: tx.amount || '-',
+    value: 'N/A', // Not directly available from API
     time: tx.timeAgo,
     impact: tx.type === 'BTC Stake' || tx.type === 'Delegate' ? 'high' : 'medium',
     status: tx.status,
@@ -96,7 +93,6 @@ const signalColors = {
   'Sell': { bg: 'bg-red-500/10', text: 'text-red-400' },
 }
 
-const router = useRouter()
 </script>
 
 <template>
