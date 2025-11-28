@@ -83,15 +83,6 @@ const closeMenu = () => {
         
         <!-- Right side actions -->
         <div class="flex items-center gap-3">
-          <!-- Search button (desktop) -->
-          <button 
-            class="hidden sm:flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-slate-400 bg-surface-800/50 border border-surface-700/50 hover:border-surface-600/50 hover:text-slate-300 transition-colors"
-          >
-            <Icon name="mdi:magnify" class="w-4 h-4" />
-            <span class="hidden lg:inline">Search</span>
-            <kbd class="hidden lg:inline px-1.5 py-0.5 text-xs bg-surface-700 rounded">⌘K</kbd>
-          </button>
-          
           <!-- Network indicator -->
           <div class="hidden sm:flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-800/50 border border-surface-700/50">
             <span class="w-2 h-2 bg-green-400 rounded-full animate-pulse" />

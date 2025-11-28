@@ -10,15 +10,11 @@ const props = withDefaults(defineProps<Props>(), {
 const currentYear = new Date().getFullYear()
 
 const links = [
-  { label: 'Documentation', href: '#' },
-  { label: 'API', href: '#' },
-  { label: 'GitHub', href: 'https://github.com', external: true },
+  { label: 'GitHub', href: 'https://github.com/Utitofon-Udoekong/tephra', external: true },
 ]
 
 const socialLinks = [
-  { icon: 'mdi:github', href: 'https://github.com', label: 'GitHub' },
-  { icon: 'mdi:twitter', href: 'https://twitter.com', label: 'Twitter' },
-  { icon: 'mdi:discord', href: 'https://discord.com', label: 'Discord' },
+  { icon: 'mdi:github', href: 'https://github.com/Utitofon-Udoekong/tephra', label: 'GitHub' },
 ]
 </script>
 
